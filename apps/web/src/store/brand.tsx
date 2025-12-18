@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { api } from '../lib/api';
 
 interface BusinessUnit {
@@ -16,6 +16,7 @@ interface BrandContextType {
   error: string | null;
   selectBrand: (brandId: string) => void;
   refreshBrands: () => Promise<void>;
+  initializeBrands: () => Promise<void>;
 }
 
 const BrandContext = createContext<BrandContextType | undefined>(undefined);
@@ -29,6 +30,13 @@ export function BrandProvider({ children }: { children: ReactNode }) {
   const fetchBrands = async () => {
     try {
       setLoading(true);
+      // Only fetch if we have a token (user is authenticated)
+      const token = api.getToken();
+      if (!token) {
+        setLoading(false);
+        return;
+      }
+
       const response = await api.get('/api/business-units/active');
       const brandsData = response.data;
       setBrands(brandsData);
@@ -43,27 +51,42 @@ export function BrandProvider({ children }: { children: ReactNode }) {
       }
       setError(null);
     } catch (err: any) {
+      console.warn('Failed to load brands:', err.message);
       setError(err.message || 'Failed to load brands');
+      // Don't crash the app on brand loading failure
+      setBrands([]);
     } finally {
       setLoading(false);
     }
   };
 
-  const selectBrand = (brandId: string) => {
+  const selectBrand = useCallback((brandId: string) => {
     const brand = brands.find((b) => b.id === brandId);
     if (brand) {
       setSelectedBrand(brand);
       localStorage.setItem('selectedBrandId', brandId);
     }
-  };
+  }, [brands]);
 
-  const refreshBrands = async () => {
+  const refreshBrands = useCallback(async () => {
     await fetchBrands();
-  };
+  }, []);
+
+  const initializeBrands = useCallback(async () => {
+    await fetchBrands();
+  }, []);
 
   useEffect(() => {
-    fetchBrands();
+    // Only fetch brands if user has a token
+    const token = api.getToken();
+    if (token) {
+      fetchBrands();
+    } else {
+      setLoading(false);
+    }
   }, []);
+
+
 
   return (
     <BrandContext.Provider
@@ -74,6 +97,7 @@ export function BrandProvider({ children }: { children: ReactNode }) {
         error,
         selectBrand,
         refreshBrands,
+        initializeBrands,
       }}
     >
       {children}

@@ -15,7 +15,7 @@ interface KnowledgeArticle {
 }
 
 export function KnowledgeBase() {
-  const { selectedBrand } = useBrand();
+  const { selectedBrand, loading: brandLoading } = useBrand();
   const [articles, setArticles] = useState<KnowledgeArticle[]>([]);
   const [selectedArticle, setSelectedArticle] = useState<KnowledgeArticle | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -24,8 +24,11 @@ export function KnowledgeBase() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchArticles();
-  }, [selectedBrand?.id, searchQuery, selectedTag]);
+    // Only fetch articles if brand context has loaded
+    if (!brandLoading) {
+      fetchArticles();
+    }
+  }, [selectedBrand?.id, searchQuery, selectedTag, brandLoading]);
 
   const fetchArticles = async () => {
     try {
@@ -39,7 +42,9 @@ export function KnowledgeBase() {
       setArticles(response.data);
       setError(null);
     } catch (err: any) {
+      console.warn('Failed to load knowledge articles:', err.message);
       setError(err.message || 'Failed to load articles');
+      setArticles([]); // Fail gracefully
     } finally {
       setLoading(false);
     }

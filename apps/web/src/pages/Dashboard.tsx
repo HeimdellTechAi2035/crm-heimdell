@@ -23,17 +23,7 @@ export const Dashboard = memo(function Dashboard() {
     avgTimeToClose: 18,
   };
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-center">
-          <div className="cyber-spinner mx-auto mb-4" />
-          <div className="font-['Orbitron'] text-cyan-400 text-sm tracking-widest">LOADING NEURAL INTERFACE...</div>
-        </div>
-      </div>
-    );
-  }
-
+  // ALL HOOKS MUST BE CALLED BEFORE ANY EARLY RETURNS
   const statCards = useMemo(() => [
     { 
       title: 'NEURAL LEADS', 
@@ -78,6 +68,17 @@ export const Dashboard = memo(function Dashboard() {
     };
     return colors[color] || colors.cyan;
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-center">
+          <div className="cyber-spinner mx-auto mb-4" />
+          <div className="font-['Orbitron'] text-cyan-400 text-sm tracking-widest">LOADING NEURAL INTERFACE...</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">

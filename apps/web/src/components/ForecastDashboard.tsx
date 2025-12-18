@@ -21,7 +21,7 @@ interface ForecastDashboardProps {
 }
 
 export function ForecastDashboard({ pipelineId, compact = false }: ForecastDashboardProps) {
-  const { selectedBrand } = useBrand();
+  const { selectedBrand, loading: brandLoading } = useBrand();
   const [forecast, setForecast] = useState<ForecastData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -38,14 +38,19 @@ export function ForecastDashboard({ pipelineId, compact = false }: ForecastDashb
         setForecast(response.data);
         setError(null);
       } catch (err: any) {
+        console.warn('Failed to load forecast:', err.message);
         setError(err.message || 'Failed to load forecast');
+        setForecast(null); // Fail gracefully
       } finally {
         setLoading(false);
       }
     };
 
-    fetchForecast();
-  }, [selectedBrand?.id, pipelineId]);
+    // Only fetch forecast if brand context has loaded
+    if (!brandLoading) {
+      fetchForecast();
+    }
+  }, [selectedBrand?.id, pipelineId, brandLoading]);
 
   if (loading) {
     return (

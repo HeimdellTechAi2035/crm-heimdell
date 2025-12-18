@@ -97,7 +97,7 @@ class ApiClient {
 
   // Auth
   async login(email: string, password: string) {
-    const data = await this.request('/auth/login', {
+    const data = await this.request('/api/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     });
@@ -106,7 +106,7 @@ class ApiClient {
   }
 
   async register(data: any) {
-    const response = await this.request('/auth/register', {
+    const response = await this.request('/api/auth/register', {
       method: 'POST',
       body: JSON.stringify(data),
     });
@@ -115,61 +115,61 @@ class ApiClient {
   }
 
   async logout() {
-    await this.request('/auth/logout', { method: 'POST' });
+    await this.request('/api/auth/logout', { method: 'POST' });
     this.setToken(null);
   }
 
   async getCurrentUser() {
-    return this.request('/auth/me');
+    return this.request('/api/auth/me');
   }
 
   // Leads
   async getLeads(params?: any) {
     const query = new URLSearchParams(params).toString();
-    return this.request(`/leads?${query}`);
+    return this.request(`/api/leads?${query}`);
   }
 
   async getLead(id: string) {
-    return this.request(`/leads/${id}`);
+    return this.request(`/api/leads/${id}`);
   }
 
   async createLead(data: any) {
-    return this.request('/leads', {
+    return this.request('/api/leads', {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
   async updateLead(id: string, data: any) {
-    return this.request(`/leads/${id}`, {
+    return this.request(`/api/leads/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(data),
     });
   }
 
   async deleteLead(id: string) {
-    return this.request(`/leads/${id}`, { method: 'DELETE' });
+    return this.request(`/api/leads/${id}`, { method: 'DELETE' });
   }
 
   // Companies
   async getCompanies(params?: any) {
     const query = new URLSearchParams(params).toString();
-    return this.request(`/companies?${query}`);
+    return this.request(`/api/companies?${query}`);
   }
 
   async getCompany(id: string) {
-    return this.request(`/companies/${id}`);
+    return this.request(`/api/companies/${id}`);
   }
 
   async createCompany(data: any) {
-    return this.request('/companies', {
+    return this.request('/api/companies', {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
   async updateCompany(id: string, data: any) {
-    return this.request(`/companies/${id}`, {
+    return this.request(`/api/companies/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(data),
     });
@@ -178,36 +178,36 @@ class ApiClient {
   // Deals
   async getDeals(params?: any) {
     const query = new URLSearchParams(params).toString();
-    return this.request(`/deals?${query}`);
+    return this.request(`/api/deals?${query}`);
   }
 
   async getDeal(id: string) {
-    return this.request(`/deals/${id}`);
+    return this.request(`/api/deals/${id}`);
   }
 
   async createDeal(data: any) {
-    return this.request('/deals', {
+    return this.request('/api/deals', {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
   async updateDeal(id: string, data: any) {
-    return this.request(`/deals/${id}`, {
+    return this.request(`/api/deals/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(data),
     });
   }
 
   async moveDeal(id: string, stageId: string) {
-    return this.request(`/deals/${id}/move`, {
+    return this.request(`/api/deals/${id}/move`, {
       method: 'POST',
       body: JSON.stringify({ stageId }),
     });
   }
 
   async closeDeal(id: string, status: 'won' | 'lost', lostReason?: string) {
-    return this.request(`/deals/${id}/close`, {
+    return this.request(`/api/deals/${id}/close`, {
       method: 'POST',
       body: JSON.stringify({ status, lostReason }),
     });
@@ -216,11 +216,11 @@ class ApiClient {
   // Activities
   async getActivities(params?: any) {
     const query = new URLSearchParams(params).toString();
-    return this.request(`/activities?${query}`);
+    return this.request(`/api/activities?${query}`);
   }
 
   async createActivity(data: any) {
-    return this.request('/activities', {
+    return this.request('/api/activities', {
       method: 'POST',
       body: JSON.stringify(data),
     });
@@ -229,18 +229,18 @@ class ApiClient {
   // Tasks
   async getTasks(params?: any) {
     const query = new URLSearchParams(params).toString();
-    return this.request(`/tasks?${query}`);
+    return this.request(`/api/tasks?${query}`);
   }
 
   async createTask(data: any) {
-    return this.request('/tasks', {
+    return this.request('/api/tasks', {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
   async updateTask(id: string, data: any) {
-    return this.request(`/tasks/${id}`, {
+    return this.request(`/api/tasks/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(data),
     });
@@ -248,27 +248,27 @@ class ApiClient {
 
   // Pipelines
   async getPipelines() {
-    return this.request('/pipelines');
+    return this.request('/api/pipelines');
   }
 
   async getPipelineBoard(id: string) {
-    return this.request(`/pipelines/${id}/board`);
+    return this.request(`/api/pipelines/${id}/board`);
   }
 
   // Sequences
   async getSequences() {
-    return this.request('/sequences');
+    return this.request('/api/sequences');
   }
 
   async createSequence(data: any) {
-    return this.request('/sequences', {
+    return this.request('/api/sequences', {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
   async enrollLead(sequenceId: string, leadId: string) {
-    return this.request(`/sequences/${sequenceId}/enroll`, {
+    return this.request(`/api/sequences/${sequenceId}/enroll`, {
       method: 'POST',
       body: JSON.stringify({ leadId }),
     });
@@ -276,35 +276,35 @@ class ApiClient {
 
   // AI
   async enrichLead(data: any) {
-    return this.request('/ai/enrich', {
+    return this.request('/api/ai/enrich', {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
   async getNextAction(data: any) {
-    return this.request('/ai/next-action', {
+    return this.request('/api/ai/next-action', {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
   async generateSequence(data: any) {
-    return this.request('/ai/generate-sequence', {
+    return this.request('/api/ai/generate-sequence', {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
   async summarizeCall(data: any) {
-    return this.request('/ai/summarize-call', {
+    return this.request('/api/ai/summarize-call', {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
   async generateProfile(data: { leadId?: string; companyId?: string }) {
-    return this.request('/ai/profile-from-import', {
+    return this.request('/api/ai/profile-from-import', {
       method: 'POST',
       body: JSON.stringify(data),
     });
@@ -316,7 +316,7 @@ class ApiClient {
     formData.append('file', file);
 
     const token = this.token || localStorage.getItem('access_token');
-    const response = await fetch(`${this.baseUrl}/imports/csv`, {
+    const response = await fetch(`${this.baseUrl}/api/imports/csv`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -333,28 +333,28 @@ class ApiClient {
   }
 
   async submitImportMapping(importJobId: string, mapping: any) {
-    return this.request(`/imports/${importJobId}/mapping`, {
+    return this.request(`/api/imports/${importJobId}/mapping`, {
       method: 'POST',
       body: JSON.stringify(mapping),
     });
   }
 
   async getImportStatus(importJobId: string) {
-    return this.request(`/imports/${importJobId}/status`);
+    return this.request(`/api/imports/${importJobId}/status`);
   }
 
   async getImportErrors(importJobId: string) {
-    return this.request(`/imports/${importJobId}/errors`);
+    return this.request(`/api/imports/${importJobId}/errors`);
   }
 
   async getImports() {
-    return this.request('/imports');
+    return this.request('/api/imports');
   }
 
   // Dashboard
   async getDashboard(params?: any) {
     const query = new URLSearchParams(params).toString();
-    return this.request(`/dashboard?${query}`);
+    return this.request(`/api/dashboard?${query}`);
   }
 }
 
