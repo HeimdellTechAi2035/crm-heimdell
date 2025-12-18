@@ -1,0 +1,96 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: heimdell_test
+          POSTGRES_USER: heimdell
+          POSTGRES_PASSWORD: heimdell_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - name: Get pnpm store directory
+        id: pnpm-cache
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v3
+        with:
+          path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Lint API
+        run: cd apps/api && pnpm lint
+
+      - name: Lint Web
+        run: cd apps/web && pnpm lint
+
+      - name: Run Prisma migrations
+        run: cd apps/api && pnpm db:migrate
+        env:
+          DATABASE_URL: postgresql://heimdell:heimdell_test@localhost:5432/heimdell_test
+
+      - name: Run API tests
+        run: cd apps/api && pnpm test
+        env:
+          DATABASE_URL: postgresql://heimdell:heimdell_test@localhost:5432/heimdell_test
+          REDIS_URL: redis://localhost:6379
+          JWT_SECRET: test_secret
+          JWT_REFRESH_SECRET: test_refresh_secret
+          OPENAI_API_KEY: sk-test
+          SMTP_HOST: localhost
+          SMTP_PORT: 587
+          SMTP_USER: test
+          SMTP_PASSWORD: test
+
+      - name: Build API
+        run: cd apps/api && pnpm build
+
+      - name: Build Web
+        run: cd apps/web && pnpm build

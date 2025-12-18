@@ -1,0 +1,16 @@
+First Name,Last Name,Email,Phone,Job Title,Company,Industry,Location,Website,Company Size
+John,Smith,john.smith@acmecorp.co.uk,07700900123,CEO,Acme Corp,SaaS,London,https://acmecorp.co.uk,50-200
+Sarah,Johnson,sarah.j@techstart.io,07700900124,CTO,TechStart,Technology,Manchester,https://techstart.io,10-50
+Michael,Brown,m.brown@consulting.com,07700900125,Director,Brown Consulting,Consulting,Birmingham,https://consulting.com,5-10
+Emma,Wilson,emma@designstudio.uk,07700900126,Founder,Wilson Design,Creative,Leeds,https://designstudio.uk,2-10
+David,Taylor,david.taylor@finance.co.uk,07700900127,CFO,Taylor Finance,Finance,Edinburgh,https://finance.co.uk,20-50
+Lisa,Anderson,l.anderson@marketing.com,07700900128,Head of Marketing,Anderson Marketing,Marketing,Bristol,https://marketing.com,10-50
+James,Thomas,james@property.co.uk,07700900129,Managing Director,Thomas Property,Real Estate,Cardiff,https://property.co.uk,5-20
+Sophie,Roberts,sophie.r@legal.com,07700900130,Partner,Roberts Legal,Legal,Glasgow,https://legal.com,10-50
+Tom,Walker,tom@garage.co.uk,07700900131,Owner,Walker's Garage,Automotive,Liverpool,,2-10
+Rachel,White,rachel@restaurant.co.uk,07700900132,Manager,White's Restaurant,Hospitality,Newcastle,https://restaurant.co.uk,10-50
+Peter,Davies,peter@software.io,07700900133,VP Engineering,Davies Software,SaaS,London,https://software.io,100-500
+Jane,Evans,jane.evans@retail.com,07700900134,Store Manager,Evans Retail,Retail,Birmingham,https://retail.com,500+
+Andrew,Hughes,a.hughes@pharma.co.uk,07700900135,R&D Director,Hughes Pharma,Healthcare,Cambridge,https://pharma.co.uk,200-1000
+Lucy,Morris,lucy@ecommerce.co.uk,07700900136,COO,Morris E-commerce,E-commerce,Leeds,https://ecommerce.co.uk,50-200
+Mark,Cooper,mark.cooper@construction.com,07700900137,Project Manager,Cooper Construction,Construction,Bristol,https://construction.com,20-100

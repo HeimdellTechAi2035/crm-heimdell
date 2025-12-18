@@ -1,0 +1,22 @@
+{
+  "name": "heimdell-crm",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Close-style Sales CRM with AI Sales Agent",
+  "scripts": {
+    "dev": "pnpm --parallel --stream -r dev",
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "lint": "pnpm -r lint",
+    "db:migrate": "pnpm --filter @heimdell/api db:migrate",
+    "db:seed": "pnpm --filter @heimdell/api db:seed",
+    "db:studio": "pnpm --filter @heimdell/api db:studio"
+  },
+  "keywords": ["crm", "sales", "ai", "heimdell"],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=8.0.0"
+  }
+}
