@@ -11,16 +11,16 @@ export const Dashboard = memo(function Dashboard() {
     retry: false,
   });
 
-  // Use mock data if API fails (no database)
+  // Use empty defaults if no API data
   const metrics = data?.metrics?.overview || {
-    newLeads: 127,
-    contactedLeads: 89,
-    totalPipelineValue: 2850000,
-    dealsCreated: 45,
-    dealsWon: 12,
-    wonValue: 892000,
-    winRate: 26.7,
-    avgTimeToClose: 18,
+    newLeads: 0,
+    contactedLeads: 0,
+    totalPipelineValue: 0,
+    dealsCreated: 0,
+    dealsWon: 0,
+    wonValue: 0,
+    winRate: 0,
+    avgTimeToClose: 0,
   };
 
   // ALL HOOKS MUST BE CALLED BEFORE ANY EARLY RETURNS
@@ -30,32 +30,28 @@ export const Dashboard = memo(function Dashboard() {
       value: metrics.newLeads || 0, 
       subtitle: `${metrics.contactedLeads || 0} neural links established`,
       icon: Users,
-      color: 'cyan',
-      trend: '+12.5%'
+      color: 'cyan'
     },
     { 
       title: 'PIPELINE VALUE', 
       value: formatCurrency(metrics.totalPipelineValue || 0), 
       subtitle: `${metrics.dealsCreated || 0} active deals`,
       icon: Target,
-      color: 'magenta',
-      trend: '+8.2%'
+      color: 'magenta'
     },
     { 
       title: 'DEALS WON', 
       value: metrics.dealsWon || 0, 
       subtitle: formatCurrency(metrics.wonValue || 0),
       icon: CheckCircle,
-      color: 'green',
-      trend: '+23.1%'
+      color: 'green'
     },
     { 
       title: 'WIN RATE', 
       value: `${metrics.winRate?.toFixed(1) || 0}%`, 
       subtitle: `Avg close: ${metrics.avgTimeToClose?.toFixed(0) || 0} cycles`,
       icon: TrendingUp,
-      color: 'purple',
-      trend: '+5.4%'
+      color: 'purple'
     },
   ], [metrics]);
 
@@ -118,9 +114,6 @@ export const Dashboard = memo(function Dashboard() {
                 <div className={`p-3 rounded ${colors.bg}`}>
                   <Icon className={`h-6 w-6 ${colors.text} glow-icon`} />
                 </div>
-                <span className={`font-['Share_Tech_Mono'] text-xs ${stat.trend.startsWith('+') ? 'text-green-400' : 'text-red-400'}`}>
-                  {stat.trend}
-                </span>
               </div>
               
               <div className={`stat-value text-3xl mb-1 ${colors.text}`} style={{ textShadow: `0 0 20px currentColor` }}>

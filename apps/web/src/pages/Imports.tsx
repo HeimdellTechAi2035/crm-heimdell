@@ -1,14 +1,22 @@
 import { useState } from 'react';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { Upload, FileCode, Database, CheckCircle, AlertTriangle, Cpu, Zap, ArrowRight, RefreshCw } from 'lucide-react';
 
 export default function ImportsPage() {
+  const queryClient = useQueryClient();
   const [step, setStep] = useState<'upload' | 'mapping' | 'progress' | 'complete'>('upload');
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [importData, setImportData] = useState<any>(null);
+  const [importResult, setImportResult] = useState<{ 
+    imported: number; 
+    skipped: number; 
+    errors: string[];
+    leadsCreated?: number;
+    companiesCreated?: number;
+    dealsCreated?: number;
+  } | null>(null);
   const [mapping, setMapping] = useState<any>({
-    leadMapping: {},
     companyMapping: {},
     duplicateHandling: 'skip',
     generateProfiles: true,
@@ -33,10 +41,18 @@ export default function ImportsPage() {
   const mappingMutation = useMutation({
     mutationFn: (data: { importJobId: string; mapping: any }) =>
       api.submitImportMapping(data.importJobId, data.mapping),
-    onSuccess: () => {
+    onSuccess: (result) => {
+      setImportResult(result);
       setStep('progress');
-      // Simulate progress for demo
-      setTimeout(() => setStep('complete'), 3000);
+      // Brief progress animation then complete
+      setTimeout(() => {
+        setStep('complete');
+        // Invalidate all queries so data refreshes
+        queryClient.invalidateQueries({ queryKey: ['leads'] });
+        queryClient.invalidateQueries({ queryKey: ['companies'] });
+        queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+        queryClient.invalidateQueries({ queryKey: ['imports'] });
+      }, 1500);
     },
   });
 
@@ -85,13 +101,15 @@ export default function ImportsPage() {
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div className="hud-corner">
-        <h1 className="text-4xl font-['Orbitron'] font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-purple-400 to-pink-400">
-          DATA UPLINK
-        </h1>
-        <p className="text-cyan-400/60 font-['Share_Tech_Mono'] text-sm mt-1 tracking-wider">
-          NEURAL IMPORT INTERFACE // CSV DATA TRANSFER PROTOCOL
-        </p>
+      <div className="flex items-center justify-between">
+        <div className="hud-corner">
+          <h1 className="text-4xl font-['Orbitron'] font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-purple-400 to-pink-400">
+            DATA UPLINK
+          </h1>
+          <p className="text-cyan-400/60 font-['Share_Tech_Mono'] text-sm mt-1 tracking-wider">
+            NEURAL IMPORT INTERFACE // CSV DATA TRANSFER PROTOCOL
+          </p>
+        </div>
       </div>
 
       {/* Progress Steps */}
@@ -283,40 +301,30 @@ export default function ImportsPage() {
               </div>
 
               {/* Mapping Sections */}
-              <div className="grid md:grid-cols-2 gap-6">
-                {/* Lead Mapping */}
-                <div className="data-panel rounded p-4">
-                  <div className="font-['Orbitron'] text-sm text-cyan-400 mb-4 tracking-wider">LEAD DATA MAPPING</div>
-                  <div className="space-y-3">
-                    {['firstName', 'lastName', 'email', 'phone', 'title'].map((field) => (
-                      <div key={field} className="flex items-center gap-3">
-                        <span className="font-['Share_Tech_Mono'] text-xs text-cyan-400/60 w-24">{field.toUpperCase()}</span>
-                        <ArrowRight className="h-4 w-4 text-cyan-400/30" />
-                        <select
-                          className="cyber-input flex-1 py-2 px-3 rounded text-sm"
-                          value={mapping.leadMapping[field] || ''}
-                          onChange={(e) => handleFieldMapping('lead', field, e.target.value)}
-                        >
-                          <option value="">-- Select Column --</option>
-                          {importData.headers?.map((header: string) => (
-                            <option key={header} value={header}>{header}</option>
-                          ))}
-                        </select>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Company Mapping */}
+              <div className="grid md:grid-cols-1 gap-6">
+                {/* Company Mapping Only */}
                 <div className="data-panel rounded p-4">
                   <div className="font-['Orbitron'] text-sm text-cyan-400 mb-4 tracking-wider">COMPANY DATA MAPPING</div>
                   <div className="space-y-3">
-                    {['name', 'website', 'industry', 'location'].map((field) => (
-                      <div key={field} className="flex items-center gap-3">
-                        <span className="font-['Share_Tech_Mono'] text-xs text-cyan-400/60 w-24">{field.toUpperCase()}</span>
-                        <ArrowRight className="h-4 w-4 text-cyan-400/30" />
+                    {[
+                      { field: 'marketShare', label: 'market_share' },
+                      { field: 'averagePosition', label: 'average_position' },
+                      { field: 'mapUrl', label: 'place/map_url' },
+                      { field: 'name', label: 'place/name' },
+                      { field: 'location', label: 'place/address' },
+                      { field: 'phone', label: 'place/phone' },
+                      { field: 'website', label: 'place/website_url' },
+                      { field: 'reviewCount', label: 'place/review_count' },
+                      { field: 'rating', label: 'place/ave_review_rating' },
+                      { field: 'ranking', label: 'place/ranking' },
+                      { field: 'industry', label: 'place/main_category' },
+                      { field: 'photosCount', label: 'photos_count' },
+                    ].map(({ field, label }) => (
+                      <div key={field} className="flex items-center justify-between gap-4 py-2 border-b border-cyan-500/10">
+                        <span className="font-['Share_Tech_Mono'] text-sm text-cyan-400 min-w-[200px]">{label}</span>
+                        <ArrowRight className="h-4 w-4 text-cyan-400/30 flex-shrink-0" />
                         <select
-                          className="cyber-input flex-1 py-2 px-3 rounded text-sm"
+                          className="cyber-input w-[250px] py-2 px-3 rounded text-sm"
                           value={mapping.companyMapping[field] || ''}
                           onChange={(e) => handleFieldMapping('company', field, e.target.value)}
                         >
@@ -423,25 +431,34 @@ export default function ImportsPage() {
             <div className="font-['Share_Tech_Mono'] text-sm text-green-400/50 mb-8">
               All records have been processed and integrated into the system
             </div>
-            <div className="grid grid-cols-3 gap-4 max-w-md mx-auto mb-8">
+            <div className="grid grid-cols-3 gap-4 max-w-lg mx-auto mb-8">
               <div className="data-panel rounded p-4">
-                <div className="stat-value text-2xl text-cyan-400">127</div>
+                <div className="stat-value text-2xl text-cyan-400">{importResult?.leadsCreated || importResult?.imported || 0}</div>
                 <div className="font-['Share_Tech_Mono'] text-[10px] text-cyan-400/50">LEADS</div>
               </div>
               <div className="data-panel rounded p-4">
-                <div className="stat-value text-2xl text-purple-400">23</div>
+                <div className="stat-value text-2xl text-purple-400">{importResult?.companiesCreated || 0}</div>
                 <div className="font-['Share_Tech_Mono'] text-[10px] text-purple-400/50">COMPANIES</div>
               </div>
               <div className="data-panel rounded p-4">
-                <div className="stat-value text-2xl text-green-400">0</div>
-                <div className="font-['Share_Tech_Mono'] text-[10px] text-green-400/50">ERRORS</div>
+                <div className="stat-value text-2xl text-orange-400">{importResult?.dealsCreated || 0}</div>
+                <div className="font-['Share_Tech_Mono'] text-[10px] text-orange-400/50">DEALS</div>
               </div>
             </div>
+            {(importResult?.errors?.length || 0) > 0 && (
+              <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded text-red-400 text-sm">
+                {importResult?.errors?.length} errors during import
+              </div>
+            )}
+            <p className="text-green-400/70 text-sm mb-6 font-['Share_Tech_Mono']">
+              ✓ All profiles linked across LEADS, COMPANIES & DEALS
+            </p>
             <button
               onClick={() => {
                 setStep('upload');
                 setUploadedFile(null);
                 setImportData(null);
+                setImportResult(null);
               }}
               className="cyber-btn px-8 py-3"
             >
@@ -460,9 +477,9 @@ export default function ImportsPage() {
           </div>
         </div>
         <div className="p-4">
-          {importsHistory?.imports?.length > 0 ? (
+          {(importsHistory?.imports?.length ?? 0) > 0 ? (
             <div className="space-y-2">
-              {importsHistory.imports.map((imp: any) => (
+              {(importsHistory?.imports ?? []).map((imp: any) => (
                 <div key={imp.id} className="data-panel rounded p-4 flex items-center justify-between radar-scan">
                   <div className="flex items-center gap-4">
                     <div className={`w-3 h-3 rounded-full ${

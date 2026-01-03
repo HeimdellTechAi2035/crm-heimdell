@@ -1,10 +1,25 @@
-# Heimdall CRM 🏠
+# Heimdall CRM 🏠 (Offline Edition)
 
-> **🎉 New here?** Start with **[START_HERE.md](./START_HERE.md)** for a complete overview!
+> **🎉 Personal Use Version** - Runs completely offline with no external dependencies!
 
-A production-ready, Close.com-style Sales CRM with built-in AI for lead generation, outreach, follow-up, and sales assistance.
+A Close.com-style Sales CRM that runs entirely on your local machine. No cloud APIs, no external services - just you and your data.
 
-Built with modern technologies and best practices, Heimdell CRM is a complete sales platform that helps teams win more deals through intelligent automation and AI-powered insights.
+## 🚀 Quick Start (Offline Mode)
+
+```bash
+# Just run this!
+start-offline.bat
+```
+
+This will:
+1. Install dependencies
+2. Set up SQLite database
+3. Start the API and Web servers
+
+**Login credentials:**
+- Admin: `admin@heimdell.com` / `admin123`
+- Manager: `manager@heimdell.com` / `manager123`
+- Sales Rep: `rep@heimdell.com` / `rep123`
 
 ## ✨ Features
 
@@ -17,47 +32,25 @@ Built with modern technologies and best practices, Heimdell CRM is a complete sa
 - 🏷️ **Tags & Custom Fields** - Flexible data organization
 - 📧 **Email Templates** - Reusable templates with personalization tokens
 
-### 🤖 AI Sales Agent
-- **Lead Enrichment**: AI analyzes companies and generates:
-  - Company summaries and pain points
-  - Sales angle suggestions
-  - 3 cold email variants + 3 follow-ups
-  - Call scripts with objection handling
-- **Next Best Action**: AI suggests what to do next based on:
-  - Activity history
-  - Deal stage
-  - Time since last contact
-  - Includes draft messages and talking points
-- **Sequence Generator**: AI creates multi-step outreach sequences
-  - Mix of emails, tasks, and calls
-  - Personalization tokens
-  - UK English, professional tone
-- **Call Summaries**: Transform rough notes into structured summaries
-  - Auto-extracted objections and commitments
-  - Generated follow-up tasks
+### 🤖 Mock AI Sales Agent (Offline)
+- **Lead Enrichment**: Generates mock data for testing
+- **Next Best Action**: Sample suggestions for next steps
+- **Sequence Generator**: Mock multi-step outreach sequences
+- **Call Summaries**: Transform notes into structured summaries
+- ⚠️ *Note: AI features use mock responses in offline mode*
 
-### ⚡ Automation
-- **Email Sequences**: Schedule multi-step outreach campaigns
-- **Daily Digests**: Morning emails with tasks and stale deals
+### ⚡ Automation (In-Memory)
+- **Email Sequences**: Logged locally (not actually sent)
 - **Activity Logging**: Automatic timeline updates
-- **BullMQ Workers**: Background job processing
+- **In-Memory Queue**: Background job processing without Redis
 
-### 🔐 Security & Enterprise
+### 🔐 Security
 - **JWT Authentication**: Access + refresh token pattern
 - **RBAC**: Admin, Manager, and Sales Rep roles
 - **Rate Limiting**: Protection against abuse
 - **Audit Logs**: Complete activity tracking
-- **Multi-tenancy**: Organization-based data isolation
 
-### � System Diagnostics
-- **Comprehensive Health Checks**: 20+ categories across DB, API, infrastructure
-- **Test Mode**: Safe verification with no side effects
-- **Admin Dashboard**: Real-time system status and component monitoring
-- **Automated Checks**: Database, Redis, Queue, Storage, Email, SMS, AI services
-- **Detailed Reporting**: Pass/Warn/Fail status with actionable recommendations
-- See **[DIAGNOSTICS.md](./DIAGNOSTICS.md)** for complete documentation
-
-### �📊 Reporting
+### 📊 Reporting
 - **Dashboard**: Real-time metrics
   - New leads, contacted leads, deals created
   - Pipeline value, won deals, win rate
@@ -65,13 +58,13 @@ Built with modern technologies and best practices, Heimdell CRM is a complete sa
 - **Stage Conversion**: Track conversion rates
 - **Rep Activity**: Monitor team performance
 
-## 🛠️ Tech Stack
+## 🛠️ Tech Stack (Offline Mode)
 
 ### Backend
 - **Runtime**: Node.js 18+ with TypeScript
 - **Framework**: Fastify (fast, low overhead)
-- **Database**: PostgreSQL with Prisma ORM
-- **Cache/Queue**: Redis + BullMQ
+- **Database**: SQLite (local file, no server needed)
+- **Queue**: In-memory (no Redis required)
 - **Validation**: Zod schemas
 - **API Docs**: OpenAPI/Swagger
 - **Real-time**: WebSocket support

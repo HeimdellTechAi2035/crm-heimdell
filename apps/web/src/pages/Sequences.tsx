@@ -22,82 +22,17 @@ interface SequenceStep {
   order: number;
 }
 
-const mockSequences: Sequence[] = [
-  {
-    id: '1',
-    name: 'NEURAL OUTREACH ALPHA',
-    description: 'Initial contact sequence for quantum computing leads',
-    status: 'ACTIVE',
-    enrolledCount: 127,
-    completedCount: 45,
-    replyRate: 32,
-    steps: [
-      { id: '1a', type: 'EMAIL', subject: 'Introduction to Quantum Solutions', order: 1 },
-      { id: '1b', type: 'WAIT', waitDays: 3, order: 2 },
-      { id: '1c', type: 'EMAIL', subject: 'Follow-up: Product Demo Invitation', order: 3 },
-      { id: '1d', type: 'WAIT', waitDays: 5, order: 4 },
-      { id: '1e', type: 'EMAIL', subject: 'Last Chance: Exclusive Offer', order: 5 },
-    ],
-  },
-  {
-    id: '2',
-    name: 'REPLICANT NURTURE',
-    description: 'Long-term nurture for biotech prospects',
-    status: 'ACTIVE',
-    enrolledCount: 89,
-    completedCount: 23,
-    replyRate: 28,
-    steps: [
-      { id: '2a', type: 'EMAIL', subject: 'Welcome to Tyrell Newsletter', order: 1 },
-      { id: '2b', type: 'WAIT', waitDays: 7, order: 2 },
-      { id: '2c', type: 'EMAIL', subject: 'Case Study: Nexus Project Success', order: 3 },
-    ],
-  },
-  {
-    id: '3',
-    name: 'CYBERDYNE RE-ENGAGEMENT',
-    description: 'Win-back sequence for dormant accounts',
-    status: 'PAUSED',
-    enrolledCount: 56,
-    completedCount: 12,
-    replyRate: 15,
-    steps: [
-      { id: '3a', type: 'EMAIL', subject: 'We Miss You at Cyberdyne', order: 1 },
-      { id: '3b', type: 'WAIT', waitDays: 4, order: 2 },
-      { id: '3c', type: 'EMAIL', subject: 'Special Offer Just for You', order: 3 },
-    ],
-  },
-  {
-    id: '4',
-    name: 'APERTURE ONBOARDING',
-    description: 'Welcome sequence for new customers',
-    status: 'DRAFT',
-    enrolledCount: 0,
-    completedCount: 0,
-    steps: [
-      { id: '4a', type: 'EMAIL', subject: 'Welcome to Aperture Science', order: 1 },
-      { id: '4b', type: 'WAIT', waitDays: 2, order: 2 },
-      { id: '4c', type: 'TASK', order: 3 },
-    ],
-  },
-];
+
 
 export function Sequences() {
   const [selectedSequence, setSelectedSequence] = useState<Sequence | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ['sequences'],
-    queryFn: async () => {
-      try {
-        return await api.get('/sequences');
-      } catch (e) {
-        return { sequences: mockSequences };
-      }
-    },
-    retry: false,
+    queryFn: () => api.get('/sequences'),
   });
 
-  const sequences = data?.sequences || mockSequences;
+  const sequences = data?.sequences || [];
 
   const getStatusColor = (status: string) => {
     const colors: Record<string, { text: string; bg: string; border: string }> = {
@@ -135,7 +70,7 @@ export function Sequences() {
           { label: 'TOTAL SEQUENCES', value: sequences.length, icon: Mail, color: 'cyan' },
           { label: 'ACTIVE', value: activeSequences, icon: Play, color: 'green' },
           { label: 'ENROLLED LEADS', value: totalEnrolled, icon: Users, color: 'purple' },
-          { label: 'AVG REPLY RATE', value: '28%', icon: Zap, color: 'orange' },
+          { label: 'AVG REPLY RATE', value: sequences.length > 0 ? `${Math.round(sequences.reduce((sum: number, s: Sequence) => sum + (s.replyRate || 0), 0) / sequences.length)}%` : '0%', icon: Zap, color: 'orange' },
         ].map((stat, i) => {
           const Icon = stat.icon;
           return (

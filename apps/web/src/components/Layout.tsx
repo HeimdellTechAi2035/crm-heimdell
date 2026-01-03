@@ -1,7 +1,8 @@
-import React from 'react';
-import { useNavigate, Link, useLocation } from 'react-router-dom';
-import { useAuthStore } from '@/store/auth';
+import React, { useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Button } from './ui/button';
+import { DeleteAllDataModal } from './DeleteAllDataModal';
+import { useAuth } from '../lib/useAuth';
 import { 
   LayoutDashboard, 
   Users, 
@@ -10,34 +11,44 @@ import {
   CheckSquare, 
   Mail, 
   BarChart3,
-  LogOut,
   Menu,
   Upload,
   Zap,
-  Shield
+  Shield,
+  Trash2,
+  LogOut
 } from 'lucide-react';
 
 export function Layout({ children }: { children: React.ReactNode }) {
-  const navigate = useNavigate();
   const location = useLocation();
-  const { user, logout } = useAuthStore();
+  const navigate = useNavigate();
+  const { logout, user, isAdmin } = useAuth();
   const [sidebarOpen, setSidebarOpen] = React.useState(true);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   const handleLogout = async () => {
-    logout();
-    navigate('/');
+    const result = await logout();
+    if (result.success) {
+      navigate('/login');
+    }
   };
 
-  const navItems = [
+  // Base nav items for all users
+  const baseNavItems = [
     { path: '/', icon: LayoutDashboard, label: 'DASHBOARD' },
     { path: '/leads', icon: Users, label: 'LEADS' },
     { path: '/companies', icon: Building2, label: 'COMPANIES' },
     { path: '/deals', icon: Target, label: 'DEALS' },
     { path: '/tasks', icon: CheckSquare, label: 'TASKS' },
     { path: '/sequences', icon: Mail, label: 'SEQUENCES' },
-    { path: '/imports', icon: Upload, label: 'IMPORT DATA' },
+    { path: '/imports/netlify', icon: Upload, label: 'IMPORT DATA' },
     { path: '/reports', icon: BarChart3, label: 'ANALYTICS' },
   ];
+
+  // Add admin-only items
+  const navItems = isAdmin 
+    ? [...baseNavItems, { path: '/admin', icon: Shield, label: 'ADMIN PANEL' }]
+    : baseNavItems;
 
   return (
     <div className="flex h-screen bg-background scan-lines">
@@ -145,31 +156,44 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </div>
           
           <div className="flex items-center gap-6">
+            {/* Delete All Data Button */}
+            <button
+              onClick={() => setShowDeleteModal(true)}
+              className="flex items-center gap-2 px-3 py-2 bg-red-500/10 border border-red-500/30 rounded text-red-400 hover:bg-red-500/20 transition-all font-['Share_Tech_Mono'] text-xs"
+            >
+              <Trash2 className="h-4 w-4" />
+              <span className="hidden sm:inline">DELETE ALL DATA</span>
+            </button>
+
+            {/* Logout Button */}
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-2 px-3 py-2 bg-orange-500/10 border border-orange-500/30 rounded text-orange-400 hover:bg-orange-500/20 transition-all font-['Share_Tech_Mono'] text-xs"
+            >
+              <LogOut className="h-4 w-4" />
+              <span className="hidden sm:inline">LOGOUT</span>
+            </button>
+
             {/* User Info */}
             <div className="flex items-center gap-4 data-panel rounded px-4 py-2">
-              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-cyan-400 to-purple-500 flex items-center justify-center">
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${isAdmin ? 'bg-gradient-to-br from-yellow-400 to-orange-500' : 'bg-gradient-to-br from-cyan-400 to-purple-500'}`}>
                 <span className="text-xs font-['Orbitron'] font-bold text-black">
-                  {user?.firstName?.[0]}{user?.lastName?.[0]}
+                  {user?.email?.substring(0, 2).toUpperCase() || 'U'}
                 </span>
               </div>
               <div>
-                <div className="text-sm font-['Orbitron'] text-cyan-400">
-                  {user?.firstName} {user?.lastName}
+                <div className="text-sm font-['Orbitron'] text-cyan-400 truncate max-w-[150px]">
+                  {user?.email?.split('@')[0] || 'User'}
                 </div>
                 <div className="text-[10px] font-['Share_Tech_Mono'] text-cyan-400/50">
-                  CLEARANCE: {user?.role || 'ADMIN'}
+                  {isAdmin ? (
+                    <span className="text-yellow-400">⚡ ADMIN</span>
+                  ) : (
+                    'AUTHENTICATED'
+                  )}
                 </div>
               </div>
             </div>
-            
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              onClick={handleLogout}
-              className="text-cyan-400 hover:bg-red-500/20 hover:text-red-400 transition-all duration-300"
-            >
-              <LogOut className="h-5 w-5" />
-            </Button>
           </div>
         </header>
 
@@ -181,6 +205,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
           {children}
         </main>
       </div>
+
+      {/* Delete All Data Modal */}
+      <DeleteAllDataModal 
+        isOpen={showDeleteModal} 
+        onClose={() => setShowDeleteModal(false)} 
+      />
     </div>
   );
 }

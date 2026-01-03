@@ -1,361 +1,517 @@
-const API_URL = import.meta.env.VITE_API_URL || '/api';
+// Local-only API Client - All data stored in browser localStorage
+// No backend server required!
 
-class ApiClient {
-  private token: string | null = null;
-  private baseUrl: string = API_URL;
+import { localDb } from './local-db';
+import { sanitizeWebsiteUrl } from './url-sanitizer';
+import { CSVImportEngine, ImportResult } from './csv-import-engine';
+import { runIntegrityAudit, getDataCounts, AuditReport } from './data-integrity-audit';
+
+// Helper to sanitize website in any data object
+function sanitizeDataWebsite<T extends Record<string, any>>(data: T): T {
+  if (data && typeof data.website === 'string') {
+    return { ...data, website: sanitizeWebsiteUrl(data.website) || '' };
+  }
+  return data;
+}
+
+class LocalApiClient {
   private requestCache = new Map();
-  private cacheTimeout = 30000; // 30 seconds cache
 
-  setToken(token: string | null) {
-    this.token = token;
-    if (token) {
-      localStorage.setItem('token', token);
-    } else {
-      localStorage.removeItem('token');
-    }
+  clearCache() {
+    this.requestCache.clear();
+  }
+
+  // Auth - Always logged in for local mode
+  setToken(_token: string | null) {
+    // No-op for local mode
   }
 
   getToken() {
-    if (!this.token) {
-      this.token = localStorage.getItem('token');
-    }
-    return this.token;
+    return 'local-token';
   }
 
-  private async request(endpoint: string, options: RequestInit = {}) {
-    const token = this.getToken();
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      ...(options.headers as Record<string, string>),
-    };
-
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-
-    const response = await fetch(`${this.baseUrl}${endpoint}`, {
-      ...options,
-      headers,
-    });
-
-    if (response.status === 401) {
-      this.setToken(null);
-      throw new Error('Unauthorized');
-    }
-
-    if (!response.ok) {
-      const error = await response
-        .json()
-        .catch(() => ({ error: 'Request failed' }));
-      throw new Error(error.message || error.error || 'Request failed');
-    }
-
-    return response.json();
+  async login(_email: string, _password: string) {
+    const user = localDb.auth.getUser();
+    return { user, token: 'local-token' };
   }
 
-  // Helper methods
-  async get(endpoint: string, useCache: boolean = true) {
-    // Check cache for GET requests
-    if (useCache) {
-      const cacheKey = `GET:${endpoint}`;
-      const cached = this.requestCache.get(cacheKey);
-      if (cached && Date.now() - cached.timestamp < this.cacheTimeout) {
-        return cached.data;
-      }
-    }
-    
-    const result = await this.request(endpoint, { method: 'GET' });
-    
-    // Cache successful GET requests
-    if (useCache) {
-      this.requestCache.set(`GET:${endpoint}`, {
-        data: result,
-        timestamp: Date.now()
-      });
-    }
-    
-    return result;
-  }
-
-  async post(endpoint: string, data?: any) {
-    return this.request(endpoint, {
-      method: 'POST',
-      body: data ? JSON.stringify(data) : undefined,
-    });
-  }
-
-  async put(endpoint: string, data?: any) {
-    return this.request(endpoint, {
-      method: 'PUT',
-      body: data ? JSON.stringify(data) : undefined,
-    });
-  }
-
-  async delete(endpoint: string) {
-    return this.request(endpoint, { method: 'DELETE' });
-  }
-
-  // Auth
-  async login(email: string, password: string) {
-    const data = await this.request('/api/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ email, password }),
-    });
-    this.setToken(data.token);
-    return data;
-  }
-
-  async register(data: any) {
-    const response = await this.request('/api/auth/register', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-    this.setToken(response.token);
-    return response;
+  async register(_data: any) {
+    const user = localDb.auth.getUser();
+    return { user, token: 'local-token' };
   }
 
   async logout() {
-    await this.request('/api/auth/logout', { method: 'POST' });
-    this.setToken(null);
+    // No-op for local mode
   }
 
   async getCurrentUser() {
-    return this.request('/api/auth/me');
+    return localDb.auth.getUser();
   }
 
   // Leads
   async getLeads(params?: any) {
-    const query = new URLSearchParams(params).toString();
-    return this.request(`/api/leads?${query}`);
+    const leads = localDb.leads.getAll(params);
+    return { leads, total: leads.length };
   }
 
   async getLead(id: string) {
-    return this.request(`/api/leads/${id}`);
+    const lead = localDb.leads.get(id);
+    if (!lead) throw new Error('Lead not found');
+    return lead;
   }
 
   async createLead(data: any) {
-    return this.request('/api/leads', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
+    return localDb.leads.create(sanitizeDataWebsite(data));
   }
 
   async updateLead(id: string, data: any) {
-    return this.request(`/api/leads/${id}`, {
-      method: 'PATCH',
-      body: JSON.stringify(data),
-    });
+    const updated = localDb.leads.update(id, sanitizeDataWebsite(data));
+    if (!updated) throw new Error('Lead not found');
+    return updated;
   }
 
   async deleteLead(id: string) {
-    return this.request(`/api/leads/${id}`, { method: 'DELETE' });
+    // Get lead to find profileId for cascade delete
+    const lead = localDb.leads.get(id);
+    if (!lead) throw new Error('Lead not found');
+    
+    const profileId = lead.profileId;
+    
+    // Cascade delete: remove linked company and deal
+    if (profileId) {
+      const companyId = `company-${profileId}`;
+      const dealId = `deal-${profileId}`;
+      localDb.companies.delete(companyId);
+      localDb.deals.delete(dealId);
+    }
+    
+    // Delete the lead
+    localDb.leads.delete(id);
+    return { success: true };
   }
 
   // Companies
   async getCompanies(params?: any) {
-    const query = new URLSearchParams(params).toString();
-    return this.request(`/api/companies?${query}`);
+    const companies = localDb.companies.getAll(params);
+    return { companies, total: companies.length };
   }
 
   async getCompany(id: string) {
-    return this.request(`/api/companies/${id}`);
+    const company = localDb.companies.get(id);
+    if (!company) throw new Error('Company not found');
+    return company;
   }
 
   async createCompany(data: any) {
-    return this.request('/api/companies', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
+    return localDb.companies.create(sanitizeDataWebsite(data));
   }
 
   async updateCompany(id: string, data: any) {
-    return this.request(`/api/companies/${id}`, {
-      method: 'PATCH',
-      body: JSON.stringify(data),
-    });
+    const updated = localDb.companies.update(id, sanitizeDataWebsite(data));
+    if (!updated) throw new Error('Company not found');
+    return updated;
+  }
+
+  async deleteCompany(id: string) {
+    // Get company to find profileId for cascade delete
+    const company = localDb.companies.get(id);
+    if (!company) throw new Error('Company not found');
+    
+    const profileId = company.profileId;
+    
+    // Cascade delete: remove linked lead and deal
+    if (profileId) {
+      const leadId = `lead-${profileId}`;
+      const dealId = `deal-${profileId}`;
+      localDb.leads.delete(leadId);
+      localDb.deals.delete(dealId);
+    }
+    
+    // Delete the company
+    localDb.companies.delete(id);
+    return { success: true };
   }
 
   // Deals
-  async getDeals(params?: any) {
-    const query = new URLSearchParams(params).toString();
-    return this.request(`/api/deals?${query}`);
+  async getDeals(_params?: any) {
+    const deals = localDb.deals.getAll();
+    return { deals, total: deals.length };
   }
 
   async getDeal(id: string) {
-    return this.request(`/api/deals/${id}`);
+    const deal = localDb.deals.get(id);
+    if (!deal) throw new Error('Deal not found');
+    return deal;
   }
 
   async createDeal(data: any) {
-    return this.request('/api/deals', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
+    return localDb.deals.create(data);
   }
 
   async updateDeal(id: string, data: any) {
-    return this.request(`/api/deals/${id}`, {
-      method: 'PATCH',
-      body: JSON.stringify(data),
-    });
+    const updated = localDb.deals.update(id, data);
+    if (!updated) throw new Error('Deal not found');
+    return updated;
+  }
+
+  async deleteDeal(id: string) {
+    // Get deal to find profileId for cascade delete
+    const deal = localDb.deals.get(id);
+    if (!deal) throw new Error('Deal not found');
+    
+    const profileId = deal.profileId;
+    
+    // Cascade delete: remove linked lead and company
+    if (profileId) {
+      const leadId = `lead-${profileId}`;
+      const companyId = `company-${profileId}`;
+      localDb.leads.delete(leadId);
+      localDb.companies.delete(companyId);
+    }
+    
+    // Delete the deal
+    localDb.deals.delete(id);
+    return { success: true };
   }
 
   async moveDeal(id: string, stageId: string) {
-    return this.request(`/api/deals/${id}/move`, {
-      method: 'POST',
-      body: JSON.stringify({ stageId }),
-    });
+    return this.updateDeal(id, { stageId });
   }
 
   async closeDeal(id: string, status: 'won' | 'lost', lostReason?: string) {
-    return this.request(`/api/deals/${id}/close`, {
-      method: 'POST',
-      body: JSON.stringify({ status, lostReason }),
-    });
+    return this.updateDeal(id, { status, lostReason, closedAt: new Date().toISOString() });
   }
 
   // Activities
-  async getActivities(params?: any) {
-    const query = new URLSearchParams(params).toString();
-    return this.request(`/api/activities?${query}`);
+  async getActivities(_params?: any) {
+    const activities = localDb.activities.getAll();
+    return { activities, total: activities.length };
   }
 
   async createActivity(data: any) {
-    return this.request('/api/activities', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
+    return localDb.activities.create(data);
   }
 
   // Tasks
-  async getTasks(params?: any) {
-    const query = new URLSearchParams(params).toString();
-    return this.request(`/api/tasks?${query}`);
+  async getTasks(_params?: any) {
+    const tasks = localDb.tasks.getAll();
+    return { tasks, total: tasks.length };
   }
 
   async createTask(data: any) {
-    return this.request('/api/tasks', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
+    return localDb.tasks.create(data);
   }
 
   async updateTask(id: string, data: any) {
-    return this.request(`/api/tasks/${id}`, {
-      method: 'PATCH',
-      body: JSON.stringify(data),
-    });
+    const updated = localDb.tasks.update(id, data);
+    if (!updated) throw new Error('Task not found');
+    return updated;
   }
 
-  // Pipelines
+  // Pipelines - Return static demo data
   async getPipelines() {
-    return this.request('/api/pipelines');
+    return {
+      pipelines: [
+        {
+          id: 'default',
+          name: 'Sales Pipeline',
+          stages: [
+            { id: 'lead', name: 'Lead', order: 1 },
+            { id: 'qualified', name: 'Qualified', order: 2 },
+            { id: 'proposal', name: 'Proposal', order: 3 },
+            { id: 'negotiation', name: 'Negotiation', order: 4 },
+            { id: 'closed', name: 'Closed', order: 5 },
+          ],
+        },
+      ],
+    };
   }
 
   async getPipelineBoard(id: string) {
-    return this.request(`/api/pipelines/${id}/board`);
+    const deals = localDb.deals.getAll();
+    const pipelines = await this.getPipelines();
+    const pipeline = pipelines.pipelines.find(p => p.id === id) || pipelines.pipelines[0];
+    
+    return {
+      pipeline,
+      deals: deals.map(d => ({
+        ...d,
+        stage: pipeline.stages.find(s => s.id === d.stageId) || pipeline.stages[0],
+      })),
+    };
   }
 
-  // Sequences
+  // Sequences - Return static demo data
   async getSequences() {
-    return this.request('/api/sequences');
+    return { sequences: [] };
   }
 
   async createSequence(data: any) {
-    return this.request('/api/sequences', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
+    return { id: 'seq-' + Date.now(), ...data };
   }
 
-  async enrollLead(sequenceId: string, leadId: string) {
-    return this.request(`/api/sequences/${sequenceId}/enroll`, {
-      method: 'POST',
-      body: JSON.stringify({ leadId }),
-    });
+  async enrollLead(_sequenceId: string, _leadId: string) {
+    return { success: true };
   }
 
-  // AI
+  // AI - Return mock responses (no actual AI in local mode)
   async enrichLead(data: any) {
-    return this.request('/api/ai/enrich', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-  }
-
-  async getNextAction(data: any) {
-    return this.request('/api/ai/next-action', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-  }
-
-  async generateSequence(data: any) {
-    return this.request('/api/ai/generate-sequence', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-  }
-
-  async summarizeCall(data: any) {
-    return this.request('/api/ai/summarize-call', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-  }
-
-  async generateProfile(data: { leadId?: string; companyId?: string }) {
-    return this.request('/api/ai/profile-from-import', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-  }
-
-  // Imports
-  async uploadCSV(file: File) {
-    const formData = new FormData();
-    formData.append('file', file);
-
-    const token = this.token || localStorage.getItem('access_token');
-    const response = await fetch(`${this.baseUrl}/api/imports/csv`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
+    return {
+      enriched: true,
+      data: {
+        ...data,
+        enrichedAt: new Date().toISOString(),
+        note: 'AI enrichment not available in local mode',
       },
-      body: formData,
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Upload failed');
-    }
-
-    return response.json();
+    };
   }
 
-  async submitImportMapping(importJobId: string, mapping: any) {
-    return this.request(`/api/imports/${importJobId}/mapping`, {
-      method: 'POST',
-      body: JSON.stringify(mapping),
-    });
+  async getNextAction(_data: any) {
+    return {
+      action: 'Follow up',
+      suggestion: 'Consider reaching out to discuss their needs.',
+      note: 'AI suggestions not available in local mode',
+    };
+  }
+
+  async generateSequence(_data: any) {
+    return {
+      steps: [
+        { type: 'email', subject: 'Introduction', delay: 0 },
+        { type: 'call', delay: 3 },
+        { type: 'email', subject: 'Follow up', delay: 7 },
+      ],
+      note: 'AI sequence generation not available in local mode',
+    };
+  }
+
+  async summarizeCall(_data: any) {
+    return {
+      summary: 'Call summary not available in local mode',
+      note: 'AI call summarization not available in local mode',
+    };
+  }
+
+  async generateProfile(_data: { leadId?: string; companyId?: string }) {
+    return {
+      profile: null,
+      note: 'AI profile generation not available in local mode',
+    };
+  }
+
+  // CSV Imports - This is the main feature!
+  // Now using improved import engine with upsert/deduplication
+  private pendingImportFile: File | null = null;
+  private pendingImportData: any = null;
+  
+  async uploadCSV(file: File) {
+    // Store the file for later processing
+    this.pendingImportFile = file;
+    
+    // Parse and preview the file (using old method for preview)
+    const result = await localDb.imports.processCSV(file);
+    this.pendingImportData = result;
+    return result;
+  }
+
+  async submitImportMapping(importJobId: string, _mapping: any): Promise<{
+    success: boolean;
+    imported: number;
+    skipped: number;
+    errors: string[];
+    leadsCreated: number;
+    companiesCreated: number;
+    dealsCreated: number;
+    leadsUpdated?: number;
+    companiesUpdated?: number;
+    dealsUpdated?: number;
+    duplicatesHandled?: number;
+  }> {
+    // Use the new import engine with upsert semantics
+    if (!this.pendingImportFile) {
+      // Fall back to old method if no file stored
+      const result = localDb.imports.executeImport(importJobId, _mapping);
+      return {
+        success: true,
+        ...result,
+      };
+    }
+    
+    try {
+      const engine = new CSVImportEngine();
+      const result: ImportResult = await engine.importFromFile(this.pendingImportFile);
+      
+      // Clear pending file
+      this.pendingImportFile = null;
+      this.pendingImportData = null;
+      
+      return {
+        success: result.success,
+        imported: result.totalRows,
+        skipped: result.duplicatesHandled,
+        errors: result.errors,
+        leadsCreated: result.leadsCreated,
+        companiesCreated: result.companiesCreated,
+        dealsCreated: result.dealsCreated,
+        leadsUpdated: result.leadsUpdated,
+        companiesUpdated: result.companiesUpdated,
+        dealsUpdated: result.dealsUpdated,
+        duplicatesHandled: result.duplicatesHandled,
+      };
+    } catch (error) {
+      console.error('Import failed:', error);
+      return {
+        success: false,
+        imported: 0,
+        skipped: 0,
+        errors: [String(error)],
+        leadsCreated: 0,
+        companiesCreated: 0,
+        dealsCreated: 0,
+      };
+    }
+  }
+
+  // Data integrity audit
+  async runDataIntegrityAudit(): Promise<AuditReport> {
+    return runIntegrityAudit();
+  }
+  
+  async getDataCounts(): Promise<{ companies: number; leads: number; deals: number }> {
+    return getDataCounts();
   }
 
   async getImportStatus(importJobId: string) {
-    return this.request(`/api/imports/${importJobId}/status`);
+    const imports = localDb.imports.getAll();
+    const importJob = imports.find((i: any) => i.id === importJobId);
+    return importJob || { status: 'not_found' };
   }
 
   async getImportErrors(importJobId: string) {
-    return this.request(`/api/imports/${importJobId}/errors`);
+    const imports = localDb.imports.getAll();
+    const importJob = imports.find((i: any) => i.id === importJobId);
+    return { errors: importJob?.errors || [] };
   }
 
   async getImports() {
-    return this.request('/api/imports');
+    const imports = localDb.imports.getAll();
+    return { imports };
+  }
+
+  /**
+   * Clean all existing website URLs in leads and companies.
+   * Useful for sanitizing data that was imported before URL sanitization was added.
+   */
+  async cleanAllWebsiteUrls() {
+    const leads = localDb.leads.getAll();
+    const companies = localDb.companies.getAll();
+    
+    let cleanedCount = 0;
+    
+    // Clean leads
+    for (const lead of leads) {
+      if (lead.website) {
+        const cleaned = sanitizeWebsiteUrl(lead.website);
+        if (cleaned !== lead.website) {
+          localDb.leads.update(lead.id, { website: cleaned || '' });
+          cleanedCount++;
+        }
+      }
+    }
+    
+    // Clean companies  
+    for (const company of companies) {
+      if (company.website) {
+        const cleaned = sanitizeWebsiteUrl(company.website);
+        if (cleaned !== company.website) {
+          localDb.companies.update(company.id, { website: cleaned || '' });
+          cleanedCount++;
+        }
+      }
+    }
+    
+    return { cleaned: cleanedCount, total: leads.length + companies.length };
   }
 
   // Dashboard
-  async getDashboard(params?: any) {
-    const query = new URLSearchParams(params).toString();
-    return this.request(`/api/dashboard?${query}`);
+  async getDashboard(_params?: any) {
+    const stats = localDb.dashboard.getStats();
+    // Return in the format expected by the Dashboard component
+    return {
+      metrics: {
+        overview: {
+          newLeads: stats.totalLeads,
+          contactedLeads: 0,
+          totalPipelineValue: 0,
+          dealsCreated: stats.totalDeals,
+          dealsWon: 0,
+          wonValue: 0,
+          winRate: 0,
+          avgTimeToClose: 0,
+        },
+        taskStats: {
+          todo: stats.openTasks,
+          completed: stats.totalTasks - stats.openTasks,
+        },
+      },
+      ...stats,
+    };
+  }
+
+  // Helper methods for compatibility - return any to avoid TypeScript union issues
+  async get(endpoint: string, _useCache: boolean = true): Promise<any> {
+    // Route to appropriate method based on endpoint
+    if (endpoint.includes('/leads')) return this.getLeads();
+    if (endpoint.includes('/companies')) return this.getCompanies();
+    if (endpoint.includes('/deals')) return this.getDeals();
+    if (endpoint.includes('/tasks')) return this.getTasks();
+    if (endpoint.includes('/activities')) return this.getActivities();
+    if (endpoint.includes('/dashboard')) return this.getDashboard();
+    if (endpoint.includes('/pipelines')) return this.getPipelines();
+    if (endpoint.includes('/imports')) return this.getImports();
+    if (endpoint.includes('/sequences')) return this.getSequences();
+    if (endpoint.includes('/field-history')) return { data: [] };
+    if (endpoint.includes('/forecasting')) return { data: {} };
+    if (endpoint.includes('/knowledge')) return { data: [] };
+    if (endpoint.includes('/health')) return { data: { status: 'ok' } };
+    if (endpoint.includes('/alerts')) return { data: [] };
+    if (endpoint.includes('/workers')) return { data: [] };
+    if (endpoint.includes('/diagnostics')) return { data: { runs: [], results: [] } };
+    if (endpoint.includes('/brands') || endpoint.includes('/brand')) return { data: [] };
+    return {};
+  }
+
+  async post(endpoint: string, data?: any) {
+    if (endpoint.includes('/leads')) return this.createLead(data);
+    if (endpoint.includes('/companies')) return this.createCompany(data);
+    if (endpoint.includes('/deals')) return this.createDeal(data);
+    if (endpoint.includes('/tasks')) return this.createTask(data);
+    if (endpoint.includes('/activities')) return this.createActivity(data);
+    return { success: true };
+  }
+
+  async put(endpoint: string, data?: any) {
+    return this.patch(endpoint, data);
+  }
+
+  async patch(endpoint: string, data?: any) {
+    const idMatch = endpoint.match(/\/([^/]+)$/);
+    const id = idMatch ? idMatch[1] : '';
+    
+    if (endpoint.includes('/leads')) return this.updateLead(id, data);
+    if (endpoint.includes('/companies')) return this.updateCompany(id, data);
+    if (endpoint.includes('/deals')) return this.updateDeal(id, data);
+    if (endpoint.includes('/tasks')) return this.updateTask(id, data);
+    return { success: true };
+  }
+
+  async delete(endpoint: string) {
+    const idMatch = endpoint.match(/\/([^/]+)$/);
+    const id = idMatch ? idMatch[1] : '';
+    
+    if (endpoint.includes('/leads')) return this.deleteLead(id);
+    return { success: true };
   }
 }
 
-export const api = new ApiClient();
+export const api = new LocalApiClient();

@@ -14,32 +14,16 @@ interface Task {
   lead?: { firstName: string; lastName: string; };
 }
 
-const mockTasks: Task[] = [
-  { id: '1', title: 'Contact lead ALPHA-7', description: 'Follow up on quantum deal proposal', status: 'TODO', priority: 'HIGH', dueDate: new Date().toISOString(), assignee: { firstName: 'Admin', lastName: 'User' }, lead: { firstName: 'Sarah', lastName: 'Connor' } },
-  { id: '2', title: 'Send contract to Tyrell Corp', description: 'Finalize replicant deal documentation', status: 'IN_PROGRESS', priority: 'URGENT', dueDate: new Date(Date.now() + 86400000).toISOString(), lead: { firstName: 'Rick', lastName: 'Deckard' } },
-  { id: '3', title: 'Review quarterly metrics', description: 'Analyze Q4 performance data', status: 'TODO', priority: 'MEDIUM', dueDate: new Date(Date.now() + 172800000).toISOString() },
-  { id: '4', title: 'Prepare demo for OCP', description: 'Set up product demonstration', status: 'COMPLETED', priority: 'HIGH', lead: { firstName: 'Alex', lastName: 'Murphy' } },
-  { id: '5', title: 'Update CRM database', description: 'Sync all lead information', status: 'TODO', priority: 'LOW', dueDate: new Date(Date.now() + 604800000).toISOString() },
-  { id: '6', title: 'Schedule meeting with Weyland', description: 'Discuss expansion plans', status: 'IN_PROGRESS', priority: 'MEDIUM', lead: { firstName: 'Ellen', lastName: 'Ripley' } },
-];
-
 export function Tasks() {
   const [filter, setFilter] = useState<'ALL' | 'TODO' | 'IN_PROGRESS' | 'COMPLETED'>('ALL');
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ['tasks'],
-    queryFn: async () => {
-      try {
-        return await api.get('/tasks');
-      } catch (e) {
-        return { tasks: mockTasks };
-      }
-    },
-    retry: false,
+    queryFn: () => api.get('/tasks'),
   });
 
-  const tasks = data?.tasks || mockTasks;
+  const tasks = data?.tasks || [];
   const filteredTasks = filter === 'ALL' ? tasks : tasks.filter((t: Task) => t.status === filter);
 
   const getPriorityColor = (priority: string) => {

@@ -1,0 +1,3 @@
+# Netlify redirects file (backup for netlify.toml)
+# SPA fallback - all routes go to index.html
+/*    /index.html   200
