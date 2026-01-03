@@ -131,10 +131,12 @@ export const Leads = memo(function Leads() {
             const rating = profile.rating || 0;
             const reviews = profile.reviewCount || 0;
             const marketShare = profile.marketShare || 0;
-            const position = profile.averagePosition || 0;
+            const position = profile.averagePosition || profile.ranking || 0;
             const category = profile.category || lead.title || 'Business';
-            const mapsUrl = profile.googleMapsUrl || '';
-            const website = profile.website || lead.company?.website || '';
+            const mapsUrl = profile.googleMapsUrl || profile.mapUrl || '';
+            const website = profile.website || lead.website || lead.company?.website || '';
+            // Multiple fallbacks for business name
+            const businessName = profile.businessName || lead.name || lead.firstName || 'Unknown Business';
             
             return (
               <div
@@ -145,7 +147,7 @@ export const Leads = memo(function Leads() {
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex-1 min-w-0">
                     <h3 className="font-['Orbitron'] text-lg text-cyan-400 group-hover:neon-text transition-all truncate">
-                      {profile.businessName || lead.firstName}
+                      {businessName}
                     </h3>
                     <span className={`inline-block mt-1 px-2 py-0.5 rounded text-xs font-['Share_Tech_Mono'] ${getCategoryColor(category)}`}>
                       {category}
