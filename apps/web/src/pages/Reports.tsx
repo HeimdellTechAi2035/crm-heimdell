@@ -1,93 +1,158 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import { BarChart3, TrendingUp, DollarSign, Users, Target, Zap, ArrowUp, ArrowDown, Activity, Cpu } from 'lucide-react';
+import { BarChart3, TrendingUp, DollarSign, Users, Target, Zap, ArrowUp, ArrowDown, Activity, Cpu, Building2, Star, MapPin } from 'lucide-react';
 
 export function Reports() {
-  const { data, isLoading } = useQuery({
-    queryKey: ['dashboard'],
-    queryFn: () => api.getDashboard(),
+  // Fetch real deals/profiles data
+  const { data: dealsData, isLoading: dealsLoading } = useQuery({
+    queryKey: ['deals'],
+    queryFn: () => api.getDeals(),
     retry: false,
   });
 
-  const metrics = data?.metrics?.overview || {
-    newLeads: 0,
-    contactedLeads: 0,
-    totalPipelineValue: 0,
-    dealsCreated: 0,
-    dealsWon: 0,
-    wonValue: 0,
-    winRate: 0,
-    avgTimeToClose: 0,
+  const { data: leadsData, isLoading: leadsLoading } = useQuery({
+    queryKey: ['leads'],
+    queryFn: () => api.getLeads(),
+    retry: false,
+  });
+
+  const isLoading = dealsLoading || leadsLoading;
+  
+  // Calculate real metrics from deals/profiles
+  const deals = dealsData?.deals || [];
+  const leads = leadsData?.leads || [];
+  
+  // Group deals by stage
+  const dealsByStage = deals.reduce((acc: Record<string, any[]>, deal: any) => {
+    const stage = deal.stageId || 'lead';
+    if (!acc[stage]) acc[stage] = [];
+    acc[stage].push(deal);
+    return acc;
+  }, {});
+
+  // Calculate stage counts
+  const stageStats = {
+    lead: dealsByStage['lead']?.length || 0,
+    qualified: dealsByStage['qualified']?.length || 0,
+    proposal: dealsByStage['proposal']?.length || 0,
+    negotiation: dealsByStage['negotiation']?.length || 0,
+    closed: (dealsByStage['won']?.length || 0) + (dealsByStage['closed']?.length || 0),
+  };
+
+  // Calculate category breakdown
+  const categoryBreakdown = deals.reduce((acc: Record<string, number>, deal: any) => {
+    const category = deal.profileJson?.category || deal.company?.industry || 'Other';
+    acc[category] = (acc[category] || 0) + 1;
+    return acc;
+  }, {});
+
+  // Get top categories
+  const topCategories = Object.entries(categoryBreakdown)
+    .sort(([,a], [,b]) => (b as number) - (a as number))
+    .slice(0, 5);
+
+  // Calculate average rating
+  const ratingsData = deals
+    .map((d: any) => d.profileJson?.rating)
+    .filter((r: any) => r && !isNaN(r));
+  const avgRating = ratingsData.length > 0 
+    ? (ratingsData.reduce((a: number, b: number) => a + b, 0) / ratingsData.length).toFixed(1)
+    : '0.0';
+
+  // Calculate total reviews
+  const totalReviews = deals.reduce((sum: number, d: any) => {
+    return sum + (d.profileJson?.reviewCount || 0);
+  }, 0);
+
+  // Top ranked businesses
+  const topRanked = [...deals]
+    .filter((d: any) => d.profileJson?.ranking)
+    .sort((a: any, b: any) => {
+      const rankA = parseInt(a.profileJson?.ranking?.replace('#', '')) || 999;
+      const rankB = parseInt(b.profileJson?.ranking?.replace('#', '')) || 999;
+      return rankA - rankB;
+    })
+    .slice(0, 4);
+
+  // Metrics object
+  const metrics = {
+    totalProfiles: deals.length,
+    totalLeads: leads.length,
+    avgRating: parseFloat(avgRating),
+    totalReviews,
+    qualified: stageStats.qualified,
+    proposals: stageStats.proposal,
+    negotiations: stageStats.negotiation,
+    closed: stageStats.closed,
   };
 
   const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('en-US', {
+    return new Intl.NumberFormat('en-GB', {
       style: 'currency',
-      currency: 'USD',
+      currency: 'GBP',
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
     }).format(value);
   };
 
-  // Calculate values safely to avoid division by zero
-  const revenueTarget = 1000000;
-  const revenueProgress = metrics.wonValue > 0 ? Math.min(100, Math.round((metrics.wonValue / revenueTarget) * 100)) : 0;
-  const leadConversion = metrics.newLeads > 0 ? ((metrics.dealsCreated / metrics.newLeads) * 100).toFixed(1) : '0.0';
-  const winRateProgress = metrics.winRate > 0 ? Math.min(100, Math.round((metrics.winRate / 35) * 100)) : 0;
-  const avgDealSize = metrics.dealsWon > 0 ? metrics.wonValue / metrics.dealsWon : 0;
-  const avgDealProgress = avgDealSize > 0 ? Math.min(100, Math.round((avgDealSize / 100000) * 100)) : 0;
-
+  // Real KPI cards based on actual data
   const kpiCards = [
     { 
-      title: 'REVENUE TARGET', 
-      value: formatCurrency(metrics.wonValue), 
-      target: '$1,000,000',
-      progress: revenueProgress,
-      icon: DollarSign, 
+      title: 'TOTAL PROFILES', 
+      value: metrics.totalProfiles.toString(), 
+      target: '500',
+      progress: Math.min(100, Math.round((metrics.totalProfiles / 500) * 100)),
+      icon: Building2, 
       color: 'cyan',
-      trend: { value: metrics.wonValue > 0 ? '+12.5%' : '--', direction: 'up' }
+      trend: { value: metrics.totalProfiles > 0 ? `+${metrics.totalProfiles}` : '--', direction: 'up' }
     },
     { 
-      title: 'LEAD CONVERSION', 
-      value: `${leadConversion}%`, 
-      target: '40%',
-      progress: metrics.newLeads > 0 ? Math.min(100, Math.round((parseFloat(leadConversion) / 40) * 100)) : 0,
+      title: 'AVG RATING', 
+      value: `${metrics.avgRating}★`, 
+      target: '5.0★',
+      progress: Math.round((metrics.avgRating / 5) * 100),
+      icon: Star, 
+      color: 'yellow',
+      trend: { value: metrics.avgRating > 0 ? `${metrics.avgRating}/5` : '--', direction: 'up' }
+    },
+    { 
+      title: 'TOTAL REVIEWS', 
+      value: totalReviews.toLocaleString(), 
+      target: '10,000',
+      progress: Math.min(100, Math.round((totalReviews / 10000) * 100)),
       icon: Users, 
       color: 'purple',
-      trend: { value: metrics.newLeads > 0 ? '+5.2%' : '--', direction: 'up' }
+      trend: { value: totalReviews > 0 ? `+${totalReviews}` : '--', direction: 'up' }
     },
     { 
-      title: 'WIN RATE', 
-      value: `${metrics.winRate?.toFixed(1) || 0}%`, 
-      target: '35%',
-      progress: winRateProgress,
+      title: 'IN PIPELINE', 
+      value: (stageStats.qualified + stageStats.proposal + stageStats.negotiation).toString(), 
+      target: '100',
+      progress: Math.min(100, Math.round(((stageStats.qualified + stageStats.proposal + stageStats.negotiation) / 100) * 100)),
       icon: Target, 
       color: 'green',
-      trend: { value: metrics.winRate > 0 ? '+2.1%' : '--', direction: 'up' }
-    },
-    { 
-      title: 'AVG DEAL SIZE', 
-      value: formatCurrency(avgDealSize), 
-      target: '$100,000',
-      progress: avgDealProgress,
-      icon: TrendingUp, 
-      color: 'orange',
-      trend: { value: avgDealSize > 0 ? '-3.2%' : '--', direction: 'down' }
+      trend: { value: stageStats.qualified > 0 ? `${stageStats.qualified} qualified` : '--', direction: 'up' }
     },
   ];
 
-  // Use empty data when no metrics available
-  const monthlyData = metrics.newLeads > 0 ? [
-    { month: 'JAN', leads: Math.round(metrics.newLeads * 0.67), deals: Math.round(metrics.dealsCreated * 0.67), revenue: Math.round(metrics.wonValue * 0.13) },
-    { month: 'FEB', leads: Math.round(metrics.newLeads * 0.72), deals: Math.round(metrics.dealsCreated * 0.83), revenue: Math.round(metrics.wonValue * 0.16) },
-    { month: 'MAR', leads: Math.round(metrics.newLeads * 0.61), deals: Math.round(metrics.dealsCreated * 0.58), revenue: Math.round(metrics.wonValue * 0.11) },
-    { month: 'APR', leads: Math.round(metrics.newLeads * 0.83), deals: Math.round(metrics.dealsCreated * 1.0), revenue: Math.round(metrics.wonValue * 0.2) },
-    { month: 'MAY', leads: Math.round(metrics.newLeads * 0.91), deals: Math.round(metrics.dealsCreated * 1.17), revenue: Math.round(metrics.wonValue * 0.22) },
-    { month: 'JUN', leads: metrics.newLeads, deals: metrics.dealsCreated, revenue: Math.round(metrics.wonValue * 0.17) },
-  ] : [];
+  // Category data for charts
+  const categoryData = topCategories.map(([name, count]) => ({
+    category: name,
+    count: count as number,
+  }));
+  
+  const maxCategoryCount = Math.max(...categoryData.map(d => d.count), 1);
 
-  const maxRevenue = Math.max(...monthlyData.map(d => d.revenue));
-  const maxLeads = Math.max(...monthlyData.map(d => d.leads));
+  // Stage data for pipeline breakdown
+  const stageData = [
+    { stage: 'LEAD', count: stageStats.lead, color: 'cyan' },
+    { stage: 'QUALIFIED', count: stageStats.qualified, color: 'blue' },
+    { stage: 'PROPOSAL', count: stageStats.proposal, color: 'purple' },
+    { stage: 'NEGOTIATION', count: stageStats.negotiation, color: 'orange' },
+    { stage: 'CLOSED', count: stageStats.closed, color: 'green' },
+  ];
+  
+  const maxStageCount = Math.max(...stageData.map(d => d.count), 1);
 
   return (
     <div className="space-y-8">
@@ -161,76 +226,85 @@ export function Reports() {
 
           {/* Charts Section */}
           <div className="grid grid-cols-2 gap-6">
-            {/* Revenue Chart */}
+            {/* Category Breakdown Chart */}
             <div className="holo-card rounded-lg overflow-hidden">
               <div className="border-b border-cyan-500/20 p-4 flex items-center gap-3">
-                <DollarSign className="h-5 w-5 text-cyan-400 glow-icon" />
-                <span className="font-['Orbitron'] text-sm tracking-wider text-cyan-400">REVENUE TREND</span>
+                <Building2 className="h-5 w-5 text-cyan-400 glow-icon" />
+                <span className="font-['Orbitron'] text-sm tracking-wider text-cyan-400">CATEGORY BREAKDOWN</span>
               </div>
               <div className="p-6">
-                <div className="flex items-end justify-between h-48 gap-4">
-                  {monthlyData.map((d, i) => (
-                    <div key={i} className="flex-1 flex flex-col items-center gap-2">
-                      <div className="w-full relative" style={{ height: '160px' }}>
-                        <div 
-                          className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-cyan-500/30 to-cyan-400/10 rounded-t transition-all hover:from-cyan-500/50 hover:to-cyan-400/20"
-                          style={{ height: `${(d.revenue / maxRevenue) * 100}%` }}
-                        >
-                          <div className="absolute -top-6 left-1/2 -translate-x-1/2 font-['Orbitron'] text-[10px] text-cyan-400 whitespace-nowrap opacity-0 hover:opacity-100 transition-opacity">
-                            ${(d.revenue / 1000).toFixed(0)}K
+                {categoryData.length > 0 ? (
+                  <div className="flex items-end justify-between h-48 gap-4">
+                    {categoryData.map((d, i) => (
+                      <div key={i} className="flex-1 flex flex-col items-center gap-2">
+                        <div className="w-full relative" style={{ height: '160px' }}>
+                          <div 
+                            className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-cyan-500/30 to-cyan-400/10 rounded-t transition-all hover:from-cyan-500/50 hover:to-cyan-400/20"
+                            style={{ height: `${(d.count / maxCategoryCount) * 100}%` }}
+                          >
+                            <div className="absolute -top-6 left-1/2 -translate-x-1/2 font-['Orbitron'] text-[10px] text-cyan-400 whitespace-nowrap">
+                              {d.count}
+                            </div>
                           </div>
                         </div>
+                        <span className="font-['Share_Tech_Mono'] text-[8px] text-cyan-400/50 text-center truncate w-full" title={d.category}>
+                          {d.category.length > 12 ? d.category.slice(0, 10) + '...' : d.category}
+                        </span>
                       </div>
-                      <span className="font-['Share_Tech_Mono'] text-[10px] text-cyan-400/50">{d.month}</span>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="h-48 flex items-center justify-center text-cyan-400/40 font-['Share_Tech_Mono']">
+                    No category data available
+                  </div>
+                )}
               </div>
             </div>
 
-            {/* Leads Chart */}
+            {/* Pipeline Stage Distribution */}
             <div className="holo-card rounded-lg overflow-hidden">
               <div className="border-b border-cyan-500/20 p-4 flex items-center gap-3">
-                <Users className="h-5 w-5 text-purple-400 glow-icon" />
-                <span className="font-['Orbitron'] text-sm tracking-wider text-purple-400">LEAD ACQUISITION</span>
+                <Target className="h-5 w-5 text-purple-400 glow-icon" />
+                <span className="font-['Orbitron'] text-sm tracking-wider text-purple-400">PIPELINE STAGES</span>
               </div>
               <div className="p-6">
-                <div className="flex items-end justify-between h-48 gap-4">
-                  {monthlyData.map((d, i) => (
-                    <div key={i} className="flex-1 flex flex-col items-center gap-2">
-                      <div className="w-full relative" style={{ height: '160px' }}>
-                        <div 
-                          className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-purple-500/30 to-purple-400/10 rounded-t transition-all hover:from-purple-500/50 hover:to-purple-400/20"
-                          style={{ height: `${(d.leads / maxLeads) * 100}%` }}
-                        >
-                          <div className="absolute -top-6 left-1/2 -translate-x-1/2 font-['Orbitron'] text-[10px] text-purple-400 whitespace-nowrap opacity-0 hover:opacity-100 transition-opacity">
-                            {d.leads}
+                {stageData.some(s => s.count > 0) ? (
+                  <div className="flex items-end justify-between h-48 gap-4">
+                    {stageData.map((d, i) => (
+                      <div key={i} className="flex-1 flex flex-col items-center gap-2">
+                        <div className="w-full relative" style={{ height: '160px' }}>
+                          <div 
+                            className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t from-${d.color}-500/30 to-${d.color}-400/10 rounded-t transition-all hover:from-${d.color}-500/50 hover:to-${d.color}-400/20`}
+                            style={{ height: `${(d.count / maxStageCount) * 100}%` }}
+                          >
+                            <div className={`absolute -top-6 left-1/2 -translate-x-1/2 font-['Orbitron'] text-[10px] text-${d.color}-400 whitespace-nowrap`}>
+                              {d.count}
+                            </div>
                           </div>
                         </div>
+                        <span className="font-['Share_Tech_Mono'] text-[8px] text-purple-400/50">{d.stage}</span>
                       </div>
-                      <span className="font-['Share_Tech_Mono'] text-[10px] text-purple-400/50">{d.month}</span>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="h-48 flex items-center justify-center text-purple-400/40 font-['Share_Tech_Mono']">
+                    No pipeline data available
+                  </div>
+                )}
               </div>
             </div>
           </div>
 
           {/* Bottom Section */}
           <div className="grid grid-cols-3 gap-6">
-            {/* Top Performers */}
+            {/* Top Ranked Businesses */}
             <div className="holo-card rounded-lg overflow-hidden">
               <div className="border-b border-cyan-500/20 p-4 flex items-center gap-3">
                 <Zap className="h-5 w-5 text-orange-400 glow-icon" />
-                <span className="font-['Orbitron'] text-sm tracking-wider text-orange-400">TOP PERFORMERS</span>
+                <span className="font-['Orbitron'] text-sm tracking-wider text-orange-400">TOP RANKED</span>
               </div>
               <div className="p-4 space-y-3">
-                {[
-                  { name: 'Sarah Connor', deals: 8, value: 245000 },
-                  { name: 'Rick Deckard', deals: 6, value: 198000 },
-                  { name: 'Ellen Ripley', deals: 5, value: 156000 },
-                  { name: 'Neo Anderson', deals: 4, value: 134000 },
-                ].map((user, i) => (
+                {topRanked.length > 0 ? topRanked.map((deal: any, i: number) => (
                   <div key={i} className="data-panel rounded p-3 flex items-center justify-between radar-scan">
                     <div className="flex items-center gap-3">
                       <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
@@ -239,16 +313,23 @@ export function Reports() {
                         i === 2 ? 'bg-orange-600/20 border border-orange-600/50' :
                         'bg-cyan-500/10 border border-cyan-500/30'
                       }`}>
-                        <span className="font-['Orbitron'] text-xs">{i + 1}</span>
+                        <span className="font-['Orbitron'] text-xs">{deal.profileJson?.ranking || `#${i+1}`}</span>
                       </div>
                       <div>
-                        <div className="font-['Rajdhani'] text-sm text-cyan-400">{user.name}</div>
-                        <div className="font-['Share_Tech_Mono'] text-[10px] text-cyan-400/40">{user.deals} deals</div>
+                        <div className="font-['Rajdhani'] text-sm text-cyan-400 truncate max-w-[140px]">{deal.title || deal.companyName}</div>
+                        <div className="font-['Share_Tech_Mono'] text-[10px] text-cyan-400/40">
+                          {deal.profileJson?.rating ? `${deal.profileJson.rating}★` : ''} 
+                          {deal.profileJson?.reviewCount ? ` · ${deal.profileJson.reviewCount} reviews` : ''}
+                        </div>
                       </div>
                     </div>
-                    <div className="font-['Orbitron'] text-sm text-green-400">{formatCurrency(user.value)}</div>
+                    <div className="font-['Orbitron'] text-xs text-green-400">{deal.profileJson?.category?.slice(0, 12) || 'Business'}</div>
                   </div>
-                ))}
+                )) : (
+                  <div className="text-center text-cyan-400/40 font-['Share_Tech_Mono'] py-8">
+                    No ranked businesses yet
+                  </div>
+                )}
               </div>
             </div>
 
@@ -259,24 +340,19 @@ export function Reports() {
                 <span className="font-['Orbitron'] text-sm tracking-wider text-cyan-400">PIPELINE BREAKDOWN</span>
               </div>
               <div className="p-4 space-y-3">
-                {[
-                  { stage: 'QUALIFIED', count: 15, value: 450000, color: 'cyan' },
-                  { stage: 'PROPOSAL', count: 8, value: 320000, color: 'purple' },
-                  { stage: 'NEGOTIATION', count: 5, value: 280000, color: 'orange' },
-                  { stage: 'CLOSING', count: 3, value: 180000, color: 'green' },
-                ].map((stage, i) => (
+                {stageData.map((stage, i) => (
                   <div key={i} className="space-y-2">
                     <div className="flex items-center justify-between">
                       <span className={`font-['Orbitron'] text-xs text-${stage.color}-400`}>{stage.stage}</span>
-                      <span className="font-['Share_Tech_Mono'] text-xs text-cyan-400/50">{stage.count} deals</span>
+                      <span className="font-['Share_Tech_Mono'] text-xs text-cyan-400/50">{stage.count} profiles</span>
                     </div>
                     <div className="cyber-progress h-6 rounded relative overflow-hidden">
                       <div 
                         className={`h-full bg-gradient-to-r from-${stage.color}-500/50 to-${stage.color}-400/30`}
-                        style={{ width: `${(stage.value / 450000) * 100}%` }}
+                        style={{ width: `${maxStageCount > 0 ? (stage.count / maxStageCount) * 100 : 0}%` }}
                       />
                       <div className="absolute inset-0 flex items-center justify-end pr-2">
-                        <span className="font-['Orbitron'] text-xs text-white/80">{formatCurrency(stage.value)}</span>
+                        <span className="font-['Orbitron'] text-xs text-white/80">{stage.count}</span>
                       </div>
                     </div>
                   </div>
@@ -284,19 +360,19 @@ export function Reports() {
               </div>
             </div>
 
-            {/* System Health */}
+            {/* Data Summary */}
             <div className="holo-card rounded-lg overflow-hidden">
               <div className="border-b border-cyan-500/20 p-4 flex items-center gap-3">
                 <Cpu className="h-5 w-5 text-green-400 glow-icon" />
-                <span className="font-['Orbitron'] text-sm tracking-wider text-green-400">SYSTEM HEALTH</span>
+                <span className="font-['Orbitron'] text-sm tracking-wider text-green-400">DATA SUMMARY</span>
               </div>
               <div className="p-4 space-y-4">
                 {[
-                  { metric: 'API RESPONSE', value: '45ms', status: 'optimal' },
-                  { metric: 'DATABASE', value: '99.9%', status: 'optimal' },
-                  { metric: 'QUEUE PROCESSING', value: '1.2s', status: 'good' },
-                  { metric: 'MEMORY USAGE', value: '62%', status: 'good' },
-                  { metric: 'ERROR RATE', value: '0.01%', status: 'optimal' },
+                  { metric: 'TOTAL PROFILES', value: deals.length.toString(), status: deals.length > 0 ? 'optimal' : 'warning' },
+                  { metric: 'CATEGORIES', value: Object.keys(categoryBreakdown).length.toString(), status: 'optimal' },
+                  { metric: 'AVG RATING', value: `${avgRating}★`, status: parseFloat(avgRating) >= 4 ? 'optimal' : 'good' },
+                  { metric: 'TOTAL REVIEWS', value: totalReviews.toLocaleString(), status: 'optimal' },
+                  { metric: 'IN PIPELINE', value: (stageStats.qualified + stageStats.proposal + stageStats.negotiation).toString(), status: 'good' },
                 ].map((item, i) => (
                   <div key={i} className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -316,7 +392,9 @@ export function Reports() {
                 <div className="pt-4 border-t border-cyan-500/20">
                   <div className="flex items-center gap-2">
                     <Activity className="h-4 w-4 text-green-400" />
-                    <span className="font-['Orbitron'] text-xs text-green-400">ALL SYSTEMS OPERATIONAL</span>
+                    <span className="font-['Orbitron'] text-xs text-green-400">
+                      {deals.length > 0 ? 'DATA LOADED FROM DATABASE' : 'NO DATA - IMPORT CSV TO START'}
+                    </span>
                   </div>
                 </div>
               </div>

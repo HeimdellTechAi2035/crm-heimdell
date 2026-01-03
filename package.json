@@ -12,7 +12,7 @@
     "node": ">=20.0.0"
   },
   "dependencies": {
-    "@netlify/neon": "^0.1.0"
+    "@neondatabase/serverless": "^0.10.4"
   },
   "devDependencies": {
     "netlify-cli": "^17.0.0"

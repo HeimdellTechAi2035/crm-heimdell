@@ -3,16 +3,52 @@
  * 
  * POST endpoint: deletes all records for a user (admin/debug only)
  * Protected with ADMIN_KEY env var
- * Requires header: x-admin-key
+ * All dependencies inlined for Netlify Functions bundling compatibility
  */
 
-import { getDb } from './lib/db.mjs';
-import { jsonResponse, errorResponse } from './lib/response.mjs';
+import { neon } from '@neondatabase/serverless';
+
+// Inline CORS headers
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-User-Id, X-User-Email, X-Admin-Key',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+  'Content-Type': 'application/json'
+};
+
+function jsonResponse(data, status = 200) {
+  return {
+    statusCode: status,
+    headers: corsHeaders,
+    body: JSON.stringify(data)
+  };
+}
+
+function errorResponse(message, status = 400) {
+  return {
+    statusCode: status,
+    headers: corsHeaders,
+    body: JSON.stringify({ success: false, error: message })
+  };
+}
+
+function getDb() {
+  const databaseUrl = process.env.NETLIFY_DATABASE_URL || process.env.DATABASE_URL;
+  if (!databaseUrl) {
+    throw new Error('DATABASE_URL environment variable is not set');
+  }
+  return neon(databaseUrl);
+}
 
 export async function handler(event) {
+  // Handle OPTIONS preflight
+  if (event.httpMethod === 'OPTIONS') {
+    return { statusCode: 204, headers: corsHeaders, body: '' };
+  }
+
   // Only allow POST
   if (event.httpMethod !== 'POST') {
-    return errorResponse(405, 'Method not allowed');
+    return errorResponse('Method not allowed', 405);
   }
 
   try {
@@ -21,11 +57,11 @@ export async function handler(event) {
     const providedKey = event.headers['x-admin-key'] || event.headers['X-Admin-Key'];
     
     if (!adminKey) {
-      return errorResponse(500, 'ADMIN_KEY not configured on server');
+      return errorResponse('ADMIN_KEY not configured on server', 500);
     }
     
     if (!providedKey || providedKey !== adminKey) {
-      return errorResponse(401, 'Unauthorized: Invalid or missing x-admin-key header');
+      return errorResponse('Unauthorized: Invalid or missing x-admin-key header', 401);
     }
     
     // Parse body
@@ -33,11 +69,11 @@ export async function handler(event) {
     const { userId, confirmDelete } = body;
     
     if (!userId) {
-      return errorResponse(400, 'userId is required');
+      return errorResponse('userId is required', 400);
     }
     
     if (confirmDelete !== true) {
-      return errorResponse(400, 'confirmDelete must be true to proceed');
+      return errorResponse('confirmDelete must be true to proceed', 400);
     }
     
     const sql = getDb();
@@ -59,6 +95,6 @@ export async function handler(event) {
     
   } catch (error) {
     console.error('delete_all_profiles error:', error);
-    return errorResponse(500, error.message || 'Internal server error');
+    return errorResponse(error.message || 'Internal server error', 500);
   }
 }

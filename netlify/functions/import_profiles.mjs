@@ -3,11 +3,42 @@
  * 
  * POST endpoint: accepts { profiles: [ ...profile objects... ] }
  * Upserts profiles into business_profiles table with deduplication
- * Returns summary: { total, inserted, updated, skipped, errors: [{index, reason}] }
+ * All dependencies inlined for Netlify Functions bundling compatibility
  */
 
-import { getDb } from './lib/db.mjs';
-import { jsonResponse, errorResponse } from './lib/response.mjs';
+import { neon } from '@neondatabase/serverless';
+
+// Inline CORS headers
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-User-Id, X-User-Email',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+  'Content-Type': 'application/json'
+};
+
+function jsonResponse(data, status = 200) {
+  return {
+    statusCode: status,
+    headers: corsHeaders,
+    body: JSON.stringify(data)
+  };
+}
+
+function errorResponse(message, status = 400) {
+  return {
+    statusCode: status,
+    headers: corsHeaders,
+    body: JSON.stringify({ success: false, error: message })
+  };
+}
+
+function getDb() {
+  const databaseUrl = process.env.NETLIFY_DATABASE_URL || process.env.DATABASE_URL;
+  if (!databaseUrl) {
+    throw new Error('DATABASE_URL environment variable is not set');
+  }
+  return neon(databaseUrl);
+}
 
 // Validate a single profile
 function validateProfile(profile, index) {
@@ -38,9 +69,14 @@ function toInt(val) {
 }
 
 export async function handler(event) {
+  // Handle OPTIONS preflight
+  if (event.httpMethod === 'OPTIONS') {
+    return { statusCode: 204, headers: corsHeaders, body: '' };
+  }
+
   // Only allow POST
   if (event.httpMethod !== 'POST') {
-    return errorResponse(405, 'Method not allowed');
+    return errorResponse('Method not allowed', 405);
   }
 
   try {
@@ -49,11 +85,11 @@ export async function handler(event) {
     const { profiles, userId } = body;
     
     if (!userId) {
-      return errorResponse(400, 'userId is required');
+      return errorResponse('userId is required', 400);
     }
     
     if (!profiles || !Array.isArray(profiles)) {
-      return errorResponse(400, 'profiles array is required');
+      return errorResponse('profiles array is required', 400);
     }
     
     if (profiles.length === 0) {
@@ -91,7 +127,6 @@ export async function handler(event) {
       
       try {
         // Upsert: INSERT ON CONFLICT UPDATE
-        // Never overwrite existing non-null values with null
         const upsertResult = await sql`
           INSERT INTO business_profiles (
             id, user_id, name, address, phone, website, map_url,
@@ -137,7 +172,6 @@ export async function handler(event) {
             (xmax = 0) AS inserted
         `;
         
-        // xmax = 0 means INSERT, otherwise UPDATE
         if (upsertResult && upsertResult[0]) {
           if (upsertResult[0].inserted) {
             result.inserted++;
@@ -159,6 +193,6 @@ export async function handler(event) {
     
   } catch (error) {
     console.error('import_profiles error:', error);
-    return errorResponse(500, error.message || 'Internal server error');
+    return errorResponse(error.message || 'Internal server error', 500);
   }
 }

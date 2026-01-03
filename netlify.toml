@@ -1,8 +1,8 @@
 # Netlify configuration for Heimdell CRM
 
 [build]
-  # Build command - install root deps first for @netlify/neon
-  command = "cd apps/web && npm install && npm run build"
+  # Build command - install root deps first for @netlify/neon, then build web app
+  command = "npm install && cd apps/web && npm install && npm run build"
   # Output directory (relative to repository root)
   publish = "apps/web/dist"
   # Functions directory (relative to repository root)
@@ -13,6 +13,8 @@
   directory = "netlify/functions"
   # Use ESM
   node_bundler = "esbuild"
+  # Include lib folder for shared utilities
+  included_files = ["netlify/functions/lib/**"]
 
 [build.environment]
   # Node version - use Node 20

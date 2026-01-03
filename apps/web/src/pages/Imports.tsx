@@ -385,6 +385,18 @@ export default function ImportsPage() {
                   </>
                 )}
               </button>
+
+              {/* Mapping Error Display */}
+              {mappingMutation.isError && (
+                <div className="mt-4 data-panel rounded p-4 border-red-500/30 bg-red-500/10">
+                  <div className="flex items-center gap-3 text-red-400">
+                    <AlertTriangle className="h-5 w-5" />
+                    <div className="font-['Rajdhani']">
+                      {(mappingMutation.error as any)?.message || 'Import failed - please try again'}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

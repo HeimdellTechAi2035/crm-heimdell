@@ -1,11 +1,11 @@
 /**
  * Database connection module for Netlify Functions
- * Uses @netlify/neon for serverless Postgres access
+ * Uses @neondatabase/serverless for serverless Postgres access
  */
 
-import { neon } from '@netlify/neon';
+import { neon } from '@neondatabase/serverless';
 
-// Get a database connection using @netlify/neon
+// Get a database connection using @neondatabase/serverless
 // The DATABASE_URL env var is automatically provided by Netlify when you add Neon integration
 export function getDb() {
   // Netlify uses NETLIFY_DATABASE_URL, fall back to DATABASE_URL for local dev

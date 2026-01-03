@@ -2,20 +2,52 @@
  * list_profiles.mjs
  * 
  * GET endpoint: returns profiles from business_profiles table
- * Supports optional query params:
- *   - category: filter by category
- *   - search: matches name/address
- *   - userId: required for user-scoped data
- * Returns JSON array of profiles
+ * All dependencies inlined for Netlify Functions bundling compatibility
  */
 
-import { getDb } from './lib/db.mjs';
-import { jsonResponse, errorResponse } from './lib/response.mjs';
+import { neon } from '@neondatabase/serverless';
+
+// Inline CORS headers
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-User-Id, X-User-Email',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+  'Content-Type': 'application/json'
+};
+
+function jsonResponse(data, status = 200) {
+  return {
+    statusCode: status,
+    headers: corsHeaders,
+    body: JSON.stringify(data)
+  };
+}
+
+function errorResponse(message, status = 400) {
+  return {
+    statusCode: status,
+    headers: corsHeaders,
+    body: JSON.stringify({ success: false, error: message })
+  };
+}
+
+function getDb() {
+  const databaseUrl = process.env.NETLIFY_DATABASE_URL || process.env.DATABASE_URL;
+  if (!databaseUrl) {
+    throw new Error('DATABASE_URL environment variable is not set');
+  }
+  return neon(databaseUrl);
+}
 
 export async function handler(event) {
+  // Handle OPTIONS preflight
+  if (event.httpMethod === 'OPTIONS') {
+    return { statusCode: 204, headers: corsHeaders, body: '' };
+  }
+
   // Only allow GET
   if (event.httpMethod !== 'GET') {
-    return errorResponse(405, 'Method not allowed');
+    return errorResponse('Method not allowed', 405);
   }
 
   try {
@@ -23,7 +55,7 @@ export async function handler(event) {
     const { userId, category, search, limit = '500' } = params;
     
     if (!userId) {
-      return errorResponse(400, 'userId query parameter is required');
+      return errorResponse('userId query parameter is required', 400);
     }
     
     const sql = getDb();
@@ -32,7 +64,6 @@ export async function handler(event) {
     let profiles;
     
     if (category && search) {
-      // Filter by both category and search
       const searchPattern = `%${search}%`;
       profiles = await sql`
         SELECT 
@@ -43,15 +74,11 @@ export async function handler(event) {
         FROM business_profiles
         WHERE user_id = ${userId}
           AND category = ${category}
-          AND (
-            name ILIKE ${searchPattern}
-            OR address ILIKE ${searchPattern}
-          )
+          AND (name ILIKE ${searchPattern} OR address ILIKE ${searchPattern})
         ORDER BY created_at DESC
         LIMIT ${maxLimit}
       `;
     } else if (category) {
-      // Filter by category only
       profiles = await sql`
         SELECT 
           id, user_id, name, address, phone, website, map_url,
@@ -59,13 +86,11 @@ export async function handler(event) {
           market_share, photos_count, dedupe_key, source, 
           import_batch_id, meta, created_at, updated_at
         FROM business_profiles
-        WHERE user_id = ${userId}
-          AND category = ${category}
+        WHERE user_id = ${userId} AND category = ${category}
         ORDER BY created_at DESC
         LIMIT ${maxLimit}
       `;
     } else if (search) {
-      // Filter by search only
       const searchPattern = `%${search}%`;
       profiles = await sql`
         SELECT 
@@ -75,15 +100,11 @@ export async function handler(event) {
           import_batch_id, meta, created_at, updated_at
         FROM business_profiles
         WHERE user_id = ${userId}
-          AND (
-            name ILIKE ${searchPattern}
-            OR address ILIKE ${searchPattern}
-          )
+          AND (name ILIKE ${searchPattern} OR address ILIKE ${searchPattern})
         ORDER BY created_at DESC
         LIMIT ${maxLimit}
       `;
     } else {
-      // Return all profiles for user
       profiles = await sql`
         SELECT 
           id, user_id, name, address, phone, website, map_url,
@@ -97,7 +118,7 @@ export async function handler(event) {
       `;
     }
     
-    // Transform to frontend format (camelCase, consistent with UI expectations)
+    // Transform to frontend format
     const transformedProfiles = profiles.map(p => ({
       id: p.id,
       userId: p.user_id,
@@ -108,11 +129,11 @@ export async function handler(event) {
       mapUrl: p.map_url,
       category: p.category,
       reviews: p.reviews,
-      reviewCount: p.reviews, // Alias for backwards compatibility
+      reviewCount: p.reviews,
       rating: p.rating ? parseFloat(p.rating) : null,
       ranking: p.ranking,
       avgPosition: p.avg_position ? parseFloat(p.avg_position) : null,
-      averagePosition: p.avg_position ? parseFloat(p.avg_position) : null, // Alias
+      averagePosition: p.avg_position ? parseFloat(p.avg_position) : null,
       marketShare: p.market_share ? parseFloat(p.market_share) : null,
       photosCount: p.photos_count,
       dedupeKey: p.dedupe_key,
@@ -121,7 +142,6 @@ export async function handler(event) {
       meta: p.meta,
       createdAt: p.created_at,
       updatedAt: p.updated_at,
-      // Build profileJson for UI compatibility
       profileJson: {
         businessName: p.name,
         category: p.category,
@@ -144,6 +164,6 @@ export async function handler(event) {
     
   } catch (error) {
     console.error('list_profiles error:', error);
-    return errorResponse(500, error.message || 'Internal server error');
+    return errorResponse(error.message || 'Internal server error', 500);
   }
 }

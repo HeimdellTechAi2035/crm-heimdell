@@ -19,7 +19,7 @@ function sanitizeDataWebsite<T extends Record<string, any>>(data: T): T {
   return data;
 }
 
-// Helper to call Netlify functions
+// Helper to call Netlify functions with proper error handling
 async function callNetlifyFunction(name: string, options: {
   method?: 'GET' | 'POST' | 'DELETE';
   body?: any;
@@ -35,10 +35,14 @@ async function callNetlifyFunction(name: string, options: {
     url += `?${searchParams.toString()}`;
   }
   
+  // Get user ID for authenticated requests
+  const userId = getCurrentUserIdSync();
+  
   const fetchOptions: RequestInit = {
     method,
     headers: {
       'Content-Type': 'application/json',
+      ...(userId && { 'X-User-Id': userId }),
     },
   };
   
@@ -46,14 +50,62 @@ async function callNetlifyFunction(name: string, options: {
     fetchOptions.body = JSON.stringify(body);
   }
   
-  const response = await fetch(url, fetchOptions);
-  
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-    throw new Error(errorData.error || `HTTP ${response.status}`);
+  let response: Response;
+  try {
+    response = await fetch(url, fetchOptions);
+  } catch (networkError) {
+    console.error(`Network error calling ${name}:`, networkError);
+    throw new Error(`Network error: Unable to reach server. Check your connection.`);
   }
   
-  return response.json();
+  // Get content-type to check if response is JSON
+  const contentType = response.headers.get('content-type') || '';
+  const isJson = contentType.includes('application/json');
+  
+  // Handle non-OK responses
+  if (!response.ok) {
+    // If it's JSON, try to parse the error message
+    if (isJson) {
+      try {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+      } catch (parseError) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+    }
+    
+    // If it's HTML (404 page, etc.), provide a clear error
+    const textPreview = await response.text().catch(() => '');
+    const preview = textPreview.substring(0, 200);
+    
+    if (response.status === 404) {
+      console.error(`Function not found: ${name}. Response:`, preview);
+      throw new Error(`Function "${name}" not found (404). Check Netlify deployment.`);
+    }
+    if (response.status === 405) {
+      throw new Error(`Method ${method} not allowed for "${name}" (405).`);
+    }
+    if (response.status === 500) {
+      throw new Error(`Server error in "${name}" (500). Check function logs.`);
+    }
+    
+    console.error(`Unexpected response from ${name}:`, { status: response.status, preview });
+    throw new Error(`HTTP ${response.status}: Unexpected response from server`);
+  }
+  
+  // Success response - verify it's actually JSON before parsing
+  if (!isJson) {
+    const textPreview = await response.text().catch(() => '');
+    console.error(`Expected JSON from ${name}, got:`, contentType, textPreview.substring(0, 200));
+    throw new Error(`Invalid response from "${name}": Expected JSON but received ${contentType || 'unknown content type'}`);
+  }
+  
+  try {
+    return await response.json();
+  } catch (parseError) {
+    console.error(`Failed to parse JSON from ${name}:`, parseError);
+    throw new Error(`Invalid JSON response from "${name}"`);
+  }
 }
 
 class LocalApiClient {
@@ -175,10 +227,58 @@ class LocalApiClient {
     return { success: true };
   }
 
-  // Companies
+  // Companies - Now fetches from Netlify DB when available
   async getCompanies(params?: any) {
+    try {
+      const userId = getCurrentUserIdSync();
+      if (userId) {
+        const dbResult = await callNetlifyFunction('list_profiles', {
+          method: 'GET',
+          params: { userId, ...(params?.category ? { category: params.category } : {}) },
+        });
+        
+        if (dbResult?.profiles && Array.isArray(dbResult.profiles)) {
+          // Convert profiles to company format
+          const companies = dbResult.profiles.map((profile: any) => ({
+            id: `company-${profile.id}`,
+            profileId: profile.id,
+            user_id: profile.userId,
+            name: profile.name,
+            email: null,
+            phone: profile.phone,
+            website: profile.website,
+            address: profile.address,
+            industry: profile.category,
+            profileJson: profile.profileJson || {
+              businessName: profile.name,
+              category: profile.category,
+              address: profile.address,
+              website: profile.website,
+              rating: profile.rating,
+              reviewCount: profile.reviews,
+              ranking: profile.ranking,
+              averagePosition: profile.avgPosition,
+              marketShare: profile.marketShare,
+              googleMapsUrl: profile.mapUrl,
+              photosCount: profile.photosCount,
+            },
+            dedupeKey: profile.dedupeKey,
+            source: profile.source || 'csv_import',
+            importBatchId: profile.importBatchId,
+            createdAt: profile.createdAt,
+            updatedAt: profile.updatedAt,
+          }));
+          
+          return { companies, total: companies.length, source: 'database' };
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to fetch companies from Netlify DB, falling back to localStorage:', error);
+    }
+    
+    // Fallback to localStorage
     const companies = localDb.companies.getAll(params);
-    return { companies, total: companies.length };
+    return { companies, total: companies.length, source: 'localStorage' };
   }
 
   async getCompany(id: string) {
@@ -217,8 +317,75 @@ class LocalApiClient {
     return { success: true };
   }
 
-  // Deals
+  // Deals - Now fetches from Netlify DB (business_profiles) and converts to deal format
   async getDeals(_params?: any) {
+    try {
+      // Try to fetch from Netlify DB first
+      const userId = getCurrentUserIdSync();
+      if (userId) {
+        const dbResult = await callNetlifyFunction('list_profiles', {
+          method: 'GET',
+          params: { userId },
+        });
+        
+        if (dbResult?.profiles && Array.isArray(dbResult.profiles)) {
+          // Convert profiles to deal format for the pipeline view
+          const deals = dbResult.profiles.map((profile: any) => {
+            // Get stage from meta if it was set, otherwise default to 'lead'
+            const meta = profile.meta || {};
+            const stage = meta.stage || 'lead';
+            
+            return {
+              id: `deal-${profile.id}`,
+              profileId: profile.id,
+              user_id: profile.userId,
+              name: `Deal: ${profile.name}`,
+              title: profile.name,
+              companyName: profile.name,
+              value: meta.dealValue || 0,
+              currency: 'GBP',
+              stageId: stage,
+              status: meta.dealStatus || 'open',
+              probability: meta.probability || 10,
+              profileJson: profile.profileJson || {
+                businessName: profile.name,
+                category: profile.category,
+                address: profile.address,
+                website: profile.website,
+                rating: profile.rating,
+                reviewCount: profile.reviews,
+                ranking: profile.ranking,
+                averagePosition: profile.avgPosition,
+                marketShare: profile.marketShare,
+                googleMapsUrl: profile.mapUrl,
+                photosCount: profile.photosCount,
+              },
+              leadId: `lead-${profile.id}`,
+              companyId: `company-${profile.id}`,
+            company: {
+              id: `company-${profile.id}`,
+              name: profile.name,
+              profileJson: profile.profileJson,
+              address: profile.address,
+              website: profile.website,
+              phone: profile.phone,
+            },
+            dedupeKey: profile.dedupeKey,
+            source: profile.source || 'csv_import',
+            importBatchId: profile.importBatchId,
+            createdAt: profile.createdAt,
+            updatedAt: profile.updatedAt,
+          };
+          });
+          
+          return { deals, total: deals.length };
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to fetch deals from Netlify DB, falling back to localStorage:', error);
+    }
+    
+    // Fallback to localStorage
     const deals = localDb.deals.getAll();
     return { deals, total: deals.length };
   }
@@ -234,6 +401,30 @@ class LocalApiClient {
   }
 
   async updateDeal(id: string, data: any) {
+    try {
+      // Try to update via Netlify function (for DB-backed deals)
+      const userId = getCurrentUserIdSync();
+      if (userId && id.startsWith('deal-')) {
+        const dbResult = await callNetlifyFunction('update_profile', {
+          method: 'POST',
+          body: { 
+            id: id, // Will strip 'deal-' prefix in the function
+            stage: data.stageId, // Map stageId to stage
+            value: data.value,
+            probability: data.probability,
+            status: data.status,
+          },
+        });
+        
+        if (dbResult?.success) {
+          return { id, ...data, updated: true };
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to update deal in DB, falling back to localStorage:', error);
+    }
+    
+    // Fallback to localStorage
     const updated = localDb.deals.update(id, data);
     if (!updated) throw new Error('Deal not found');
     return updated;
