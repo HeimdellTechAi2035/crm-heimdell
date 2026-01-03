@@ -1,10 +1,15 @@
 // Local-only API Client - All data stored in browser localStorage
+// With Netlify DB persistence for production deployments
 // No backend server required!
 
 import { localDb } from './local-db';
 import { sanitizeWebsiteUrl } from './url-sanitizer';
 import { CSVImportEngine, ImportResult } from './csv-import-engine';
 import { runIntegrityAudit, getDataCounts, AuditReport } from './data-integrity-audit';
+import { getCurrentUserIdSync } from './supabaseClient';
+
+// Netlify Functions base URL
+const NETLIFY_FUNCTIONS_URL = '/.netlify/functions';
 
 // Helper to sanitize website in any data object
 function sanitizeDataWebsite<T extends Record<string, any>>(data: T): T {
@@ -12,6 +17,43 @@ function sanitizeDataWebsite<T extends Record<string, any>>(data: T): T {
     return { ...data, website: sanitizeWebsiteUrl(data.website) || '' };
   }
   return data;
+}
+
+// Helper to call Netlify functions
+async function callNetlifyFunction(name: string, options: {
+  method?: 'GET' | 'POST' | 'DELETE';
+  body?: any;
+  params?: Record<string, string>;
+} = {}): Promise<any> {
+  const { method = 'GET', body, params } = options;
+  
+  let url = `${NETLIFY_FUNCTIONS_URL}/${name}`;
+  
+  // Add query params for GET requests
+  if (params && Object.keys(params).length > 0) {
+    const searchParams = new URLSearchParams(params);
+    url += `?${searchParams.toString()}`;
+  }
+  
+  const fetchOptions: RequestInit = {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  };
+  
+  if (body && method !== 'GET') {
+    fetchOptions.body = JSON.stringify(body);
+  }
+  
+  const response = await fetch(url, fetchOptions);
+  
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+    throw new Error(errorData.error || `HTTP ${response.status}`);
+  }
+  
+  return response.json();
 }
 
 class LocalApiClient {
@@ -48,10 +90,53 @@ class LocalApiClient {
     return localDb.auth.getUser();
   }
 
-  // Leads
+  // Leads - Try DB first, fallback to localStorage
   async getLeads(params?: any) {
+    const userId = getCurrentUserIdSync();
+    
+    // Try to fetch from Netlify DB first
+    if (userId) {
+      try {
+        const dbParams: Record<string, string> = { userId };
+        if (params?.search) dbParams.search = params.search;
+        if (params?.category) dbParams.category = params.category;
+        
+        const response = await callNetlifyFunction('list_profiles', {
+          method: 'GET',
+          params: dbParams,
+        });
+        
+        if (response?.profiles?.length > 0) {
+          console.log('Loaded profiles from DB:', response.profiles.length);
+          // Transform DB profiles to lead format for UI compatibility
+          const leads = response.profiles.map((p: any) => ({
+            id: p.id,
+            profileId: p.id,
+            user_id: p.userId,
+            name: p.name,
+            firstName: p.name, // For backwards compatibility
+            email: '',
+            phone: p.phone,
+            website: p.website,
+            address: p.address,
+            status: 'new',
+            source: p.source,
+            profileJson: p.profileJson,
+            companyId: `company-${p.id}`,
+            dedupeKey: p.dedupeKey,
+            importBatchId: p.importBatchId,
+            createdAt: p.createdAt,
+          }));
+          return { leads, total: leads.length, source: 'db' };
+        }
+      } catch (dbError) {
+        console.warn('Failed to fetch from DB, using localStorage:', dbError);
+      }
+    }
+    
+    // Fallback to localStorage
     const leads = localDb.leads.getAll(params);
-    return { leads, total: leads.length };
+    return { leads, total: leads.length, source: 'localStorage' };
   }
 
   async getLead(id: string) {
@@ -326,6 +411,8 @@ class LocalApiClient {
     companiesUpdated?: number;
     dealsUpdated?: number;
     duplicatesHandled?: number;
+    dbPersisted?: boolean;
+    dbResult?: any;
   }> {
     // Use the new import engine with upsert semantics
     if (!this.pendingImportFile) {
@@ -340,6 +427,48 @@ class LocalApiClient {
     try {
       const engine = new CSVImportEngine();
       const result: ImportResult = await engine.importFromFile(this.pendingImportFile);
+      
+      // After local import, persist to Netlify DB
+      let dbPersisted = false;
+      let dbResult: any = null;
+      
+      try {
+        const userId = getCurrentUserIdSync();
+        if (userId) {
+          // Get imported leads from localStorage and convert to profiles for DB
+          const leads = localDb.leads.getAll();
+          const profiles = leads.map((lead: any) => ({
+            id: lead.id,
+            name: lead.profileJson?.businessName || lead.name,
+            address: lead.profileJson?.address || lead.address,
+            phone: lead.phone,
+            website: lead.profileJson?.website || lead.website,
+            mapUrl: lead.profileJson?.googleMapsUrl,
+            category: lead.profileJson?.category,
+            reviews: lead.profileJson?.reviewCount,
+            rating: lead.profileJson?.rating,
+            ranking: lead.profileJson?.ranking,
+            avgPosition: lead.profileJson?.averagePosition,
+            marketShare: lead.profileJson?.marketShare,
+            photosCount: lead.profileJson?.photosCount,
+            dedupeKey: lead.dedupeKey,
+            source: lead.source || 'csv_import',
+            importBatchId: lead.importBatchId,
+            meta: lead.profileJson?.rawData || {},
+          }));
+          
+          if (profiles.length > 0) {
+            dbResult = await callNetlifyFunction('import_profiles', {
+              method: 'POST',
+              body: { profiles, userId },
+            });
+            dbPersisted = dbResult?.success === true;
+            console.log('DB persistence result:', dbResult);
+          }
+        }
+      } catch (dbError) {
+        console.warn('Failed to persist to Netlify DB (will use localStorage):', dbError);
+      }
       
       // Clear pending file
       this.pendingImportFile = null;
@@ -357,6 +486,8 @@ class LocalApiClient {
         companiesUpdated: result.companiesUpdated,
         dealsUpdated: result.dealsUpdated,
         duplicatesHandled: result.duplicatesHandled,
+        dbPersisted,
+        dbResult,
       };
     } catch (error) {
       console.error('Import failed:', error);

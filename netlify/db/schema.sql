@@ -88,6 +88,51 @@ CREATE INDEX IF NOT EXISTS idx_deals_lead_id ON deals(lead_id);
 CREATE INDEX IF NOT EXISTS idx_deals_stage ON deals(stage);
 
 -- ============================================================================
+-- BUSINESS_PROFILES TABLE - Primary table for imported business data
+-- ============================================================================
+-- This is the authoritative table for all CSV-imported business profiles.
+-- All 12 CSV fields are stored here with proper types and constraints.
+
+CREATE TABLE IF NOT EXISTS business_profiles (
+  id TEXT PRIMARY KEY,                            -- Client-generated ID
+  user_id TEXT NOT NULL,                          -- User who imported the profile
+  name TEXT NOT NULL,                             -- place/name
+  address TEXT,                                   -- place/address
+  phone TEXT,                                     -- place/phone
+  website TEXT,                                   -- place/website_url
+  map_url TEXT,                                   -- place/map_url
+  category TEXT,                                  -- place/main_category
+  reviews INTEGER DEFAULT 0,                      -- place/review_count
+  rating NUMERIC(3,2),                            -- place/ave_review_rating
+  ranking TEXT,                                   -- place/ranking
+  avg_position NUMERIC(10,4),                     -- average_position
+  market_share NUMERIC(10,4),                     -- market_share
+  photos_count INTEGER DEFAULT 0,                 -- photos_count
+  dedupe_key TEXT NOT NULL,                       -- For duplicate detection
+  source TEXT DEFAULT 'csv_import',               -- Import source
+  import_batch_id TEXT,                           -- Batch tracking
+  meta JSONB DEFAULT '{}',                        -- Store any extra/unexpected columns
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  
+  -- Unique constraint: prevent duplicates per user using dedupe_key
+  CONSTRAINT unique_business_per_user UNIQUE(user_id, dedupe_key)
+);
+
+-- Indexes for business_profiles
+CREATE INDEX IF NOT EXISTS idx_business_profiles_user_id ON business_profiles(user_id);
+CREATE INDEX IF NOT EXISTS idx_business_profiles_category ON business_profiles(category);
+CREATE INDEX IF NOT EXISTS idx_business_profiles_name ON business_profiles(name);
+CREATE INDEX IF NOT EXISTS idx_business_profiles_dedupe_key ON business_profiles(dedupe_key);
+
+-- Trigger for updated_at
+DROP TRIGGER IF EXISTS update_business_profiles_updated_at ON business_profiles;
+CREATE TRIGGER update_business_profiles_updated_at
+  BEFORE UPDATE ON business_profiles
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
+
+-- ============================================================================
 -- IMPORT_JOBS TABLE (track import history)
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS import_jobs (
