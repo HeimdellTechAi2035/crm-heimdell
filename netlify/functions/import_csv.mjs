@@ -176,11 +176,14 @@ export async function handler(event) {
 
     // Parse request body
     const body = JSON.parse(event.body || '{}');
-    const { csv_text, filename } = body;
+    const { csv_text, filename, pipeline_id } = body;
 
     if (!csv_text) {
       return errorResponse('csv_text is required', 400);
     }
+
+    // Default to 'default' pipeline if not specified
+    const targetPipeline = pipeline_id || 'default';
 
     // Parse CSV
     const { headers, rows } = parseCSV(csv_text);
@@ -216,7 +219,7 @@ export async function handler(event) {
           INSERT INTO business_profiles (
             id, user_id, name, address, phone, website, map_url,
             category, reviews, rating, ranking, avg_position,
-            market_share, photos_count, dedupe_key, source, import_batch_id, meta
+            market_share, photos_count, dedupe_key, source, import_batch_id, meta, pipeline_id
           ) VALUES (
             ${profile.id},
             ${userId},
@@ -235,7 +238,8 @@ export async function handler(event) {
             ${profile.dedupeKey},
             ${profile.source},
             ${filename || null},
-            ${JSON.stringify(profile.meta || {})}
+            ${JSON.stringify(profile.meta || {})},
+            ${targetPipeline}
           )
           ON CONFLICT (user_id, dedupe_key) DO UPDATE SET
             name = COALESCE(EXCLUDED.name, business_profiles.name),
@@ -252,6 +256,7 @@ export async function handler(event) {
             photos_count = COALESCE(EXCLUDED.photos_count, business_profiles.photos_count),
             import_batch_id = EXCLUDED.import_batch_id,
             meta = EXCLUDED.meta,
+            pipeline_id = EXCLUDED.pipeline_id,
             updated_at = NOW()
           RETURNING (xmax = 0) AS inserted
         `;

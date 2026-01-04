@@ -6,7 +6,7 @@
  */
 
 import { useState, useCallback } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { netlifyApi, type ImportResult } from '../lib/netlify-api';
 import { 
   Upload, 
@@ -19,7 +19,9 @@ import {
   Building2,
   Users,
   Target,
-  Eye
+  Eye,
+  Plus,
+  Layers
 } from 'lucide-react';
 
 interface CSVUploadProps {
@@ -34,6 +36,13 @@ interface ParsedCSV {
   filename: string;
 }
 
+interface Pipeline {
+  id: string;
+  name: string;
+  color?: string;
+  profile_count?: number;
+}
+
 export function CSVUpload({ onComplete, onCancel }: CSVUploadProps) {
   const queryClient = useQueryClient();
   const [step, setStep] = useState<'upload' | 'preview' | 'importing' | 'complete'>('upload');
@@ -41,11 +50,33 @@ export function CSVUpload({ onComplete, onCancel }: CSVUploadProps) {
   const [result, setResult] = useState<ImportResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
+  const [selectedPipeline, setSelectedPipeline] = useState<string>('default');
+  const [showNewPipelineInput, setShowNewPipelineInput] = useState(false);
+  const [newPipelineName, setNewPipelineName] = useState('');
+
+  // Fetch pipelines
+  const { data: pipelinesData } = useQuery({
+    queryKey: ['pipelines'],
+    queryFn: () => netlifyApi.getPipelines(),
+  });
+
+  const pipelines: Pipeline[] = pipelinesData?.pipelines || [];
+
+  // Create pipeline mutation
+  const createPipelineMutation = useMutation({
+    mutationFn: (name: string) => netlifyApi.createPipeline({ name }),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['pipelines'] });
+      setSelectedPipeline(data.pipeline.id);
+      setShowNewPipelineInput(false);
+      setNewPipelineName('');
+    },
+  });
 
   // Import mutation
   const importMutation = useMutation({
     mutationFn: async (csv: ParsedCSV) => {
-      return netlifyApi.importCSV(csv.rawText, csv.filename);
+      return netlifyApi.importCSV(csv.rawText, csv.filename, selectedPipeline);
     },
     onSuccess: (data) => {
       setResult(data);
@@ -360,6 +391,70 @@ export function CSVUpload({ onComplete, onCancel }: CSVUploadProps) {
               </div>
               <div className="font-['Share_Tech_Mono'] text-xs text-green-400/50 text-center mt-3">
                 DUPLICATES WILL BE UPDATED // NO DATA LOSS
+              </div>
+            </div>
+
+            {/* Pipeline Selector */}
+            <div className="p-4 bg-purple-500/10 rounded-lg border border-purple-500/20">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <Layers className="h-4 w-4 text-purple-400" />
+                  <span className="font-['Orbitron'] text-sm text-purple-400">SELECT PIPELINE</span>
+                </div>
+                <button
+                  onClick={() => setShowNewPipelineInput(!showNewPipelineInput)}
+                  className="flex items-center gap-1 text-xs text-purple-400 hover:text-purple-300 font-['Share_Tech_Mono']"
+                >
+                  <Plus className="h-3 w-3" />
+                  NEW PIPELINE
+                </button>
+              </div>
+
+              {/* New Pipeline Input */}
+              {showNewPipelineInput && (
+                <div className="flex gap-2 mb-3">
+                  <input
+                    type="text"
+                    value={newPipelineName}
+                    onChange={(e) => setNewPipelineName(e.target.value)}
+                    placeholder="Pipeline name (e.g., Electricians Preston)"
+                    className="flex-1 px-3 py-2 bg-gray-900 border border-purple-500/30 rounded text-white text-sm font-['Rajdhani'] placeholder-gray-500 focus:outline-none focus:border-purple-500"
+                  />
+                  <button
+                    onClick={() => createPipelineMutation.mutate(newPipelineName)}
+                    disabled={!newPipelineName.trim() || createPipelineMutation.isPending}
+                    className="px-4 py-2 bg-purple-500 hover:bg-purple-400 text-black font-['Orbitron'] text-xs rounded disabled:opacity-50"
+                  >
+                    {createPipelineMutation.isPending ? '...' : 'CREATE'}
+                  </button>
+                </div>
+              )}
+
+              {/* Pipeline Grid */}
+              <div className="grid grid-cols-2 gap-2">
+                {pipelines.map((pipeline) => (
+                  <button
+                    key={pipeline.id}
+                    onClick={() => setSelectedPipeline(pipeline.id)}
+                    className={`p-3 rounded border text-left transition-all ${
+                      selectedPipeline === pipeline.id
+                        ? 'border-purple-500 bg-purple-500/20'
+                        : 'border-gray-700 hover:border-purple-500/50'
+                    }`}
+                  >
+                    <div className="font-['Orbitron'] text-sm text-white">
+                      {pipeline.name}
+                    </div>
+                    <div className="font-['Share_Tech_Mono'] text-xs text-gray-400 mt-1">
+                      {pipeline.profile_count || 0} profiles
+                    </div>
+                  </button>
+                ))}
+                {pipelines.length === 0 && (
+                  <div className="col-span-2 text-center py-4 text-gray-500 font-['Share_Tech_Mono'] text-sm">
+                    Loading pipelines...
+                  </div>
+                )}
               </div>
             </div>
 

@@ -1,8 +1,8 @@
 /**
- * update_profile.mjs
+ * bulk_update_values.mjs
  * 
- * PATCH endpoint: updates a profile's stage or other fields
- * Body: { id: "profile-id", stage: "qualified", ...other fields }
+ * POST endpoint: updates all profiles with a specified deal value
+ * Body: { value: 750 } or { value: 750, stage: "lead" } to filter by stage
  */
 
 import { neon } from '@neondatabase/serverless';
@@ -45,8 +45,7 @@ export async function handler(event) {
     return { statusCode: 204, headers: corsHeaders, body: '' };
   }
 
-  // Allow PATCH and POST
-  if (event.httpMethod !== 'PATCH' && event.httpMethod !== 'POST') {
+  if (event.httpMethod !== 'POST') {
     return errorResponse('Method not allowed', 405);
   }
 
@@ -61,68 +60,50 @@ export async function handler(event) {
 
     // Parse request body
     const body = JSON.parse(event.body || '{}');
-    const { id, stage, value, probability, status, notes } = body;
+    const { value, stage } = body;
 
-    if (!id) {
-      return errorResponse('id is required', 400);
+    if (value === undefined || value === null) {
+      return errorResponse('value is required', 400);
     }
-
-    // Remove 'deal-' prefix if present (deals have id like 'deal-bp-123')
-    const profileId = id.replace(/^deal-/, '');
 
     const sql = getDb();
 
-    // Build the meta updates - we need to chain jsonb_set calls properly
-    const metaUpdates = {};
-    
-    if (stage !== undefined) {
-      metaUpdates.stage = stage;
-    }
-    if (value !== undefined) {
-      metaUpdates.dealValue = value;
-    }
-    if (probability !== undefined) {
-      metaUpdates.probability = probability;
-    }
-    if (status !== undefined) {
-      metaUpdates.dealStatus = status;
-    }
-    if (notes !== undefined) {
-      metaUpdates.notes = notes;
-    }
+    let query;
+    let values;
 
-    if (Object.keys(metaUpdates).length === 0) {
-      return errorResponse('No fields to update', 400);
+    if (stage) {
+      // Update only profiles with specific stage
+      query = `
+        UPDATE business_profiles 
+        SET meta = COALESCE(meta, '{}') || $1::jsonb,
+            updated_at = NOW()
+        WHERE user_id = $2 
+          AND (meta->>'stage' = $3 OR ($3 = 'lead' AND (meta->>'stage' IS NULL OR meta->>'stage' = 'lead')))
+        RETURNING id
+      `;
+      values = [JSON.stringify({ dealValue: value }), userId, stage];
+    } else {
+      // Update ALL profiles for this user
+      query = `
+        UPDATE business_profiles 
+        SET meta = COALESCE(meta, '{}') || $1::jsonb,
+            updated_at = NOW()
+        WHERE user_id = $2
+        RETURNING id
+      `;
+      values = [JSON.stringify({ dealValue: value }), userId];
     }
-
-    // Build the update - merge with existing meta
-    const values = [JSON.stringify(metaUpdates), profileId, userId];
-    const updates = [`meta = COALESCE(meta, '{}') || $1::jsonb`];
-
-    // Add updated_at
-    updates.push('updated_at = NOW()');
-
-    const query = `
-      UPDATE business_profiles 
-      SET ${updates.join(', ')}
-      WHERE id = $2 AND user_id = $3
-      RETURNING id, name, meta
-    `;
 
     const result = await sql(query, values);
 
-    if (result.length === 0) {
-      return errorResponse('Profile not found or access denied', 404);
-    }
-
     return jsonResponse({
       success: true,
-      profile: result[0],
-      message: 'Profile updated successfully'
+      updatedCount: result.length,
+      message: `Updated ${result.length} profiles with value £${value}`
     });
 
   } catch (error) {
-    console.error('update_profile error:', error);
+    console.error('bulk_update_values error:', error);
     return errorResponse(error.message || 'Internal server error', 500);
   }
 }

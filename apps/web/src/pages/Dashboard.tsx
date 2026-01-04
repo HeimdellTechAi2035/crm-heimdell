@@ -22,13 +22,23 @@ export const Dashboard = memo(function Dashboard() {
     winRate: 0,
     avgTimeToClose: 0,
   };
+  
+  const stageBreakdown = data?.metrics?.stageBreakdown || {
+    lead: 0,
+    qualified: 0,
+    proposal: 0,
+    negotiation: 0,
+    closed: 0,
+  };
+  
+  const totalProfiles = data?.totalLeads || 0;
 
   // ALL HOOKS MUST BE CALLED BEFORE ANY EARLY RETURNS
   const statCards = useMemo(() => [
     { 
       title: 'NEURAL LEADS', 
-      value: metrics.newLeads || 0, 
-      subtitle: `${metrics.contactedLeads || 0} neural links established`,
+      value: totalProfiles, 
+      subtitle: `${metrics.contactedLeads || 0} qualified leads`,
       icon: Users,
       color: 'cyan'
     },
@@ -53,7 +63,7 @@ export const Dashboard = memo(function Dashboard() {
       icon: TrendingUp,
       color: 'purple'
     },
-  ], [metrics]);
+  ], [metrics, totalProfiles]);
 
   const getColorClasses = (color: string) => {
     const colors: Record<string, { border: string; glow: string; text: string; bg: string }> = {
@@ -139,35 +149,46 @@ export const Dashboard = memo(function Dashboard() {
 
       {/* System Panels */}
       <div className="grid gap-6 lg:grid-cols-3">
-        {/* Activity Feed */}
+        {/* Activity Feed - Now with real stats */}
         <div className="lg:col-span-2 holo-card rounded-lg overflow-hidden">
           <div className="border-b border-cyan-500/20 p-4 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <Activity className="h-5 w-5 text-cyan-400 glow-icon" />
-              <span className="font-['Orbitron'] text-sm tracking-wider text-cyan-400">NEURAL ACTIVITY LOG</span>
+              <span className="font-['Orbitron'] text-sm tracking-wider text-cyan-400">PIPELINE STATUS</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-              <span className="font-['Share_Tech_Mono'] text-[10px] text-green-400">STREAMING</span>
+              <span className="font-['Share_Tech_Mono'] text-[10px] text-green-400">LIVE</span>
             </div>
           </div>
           <div className="p-4 space-y-3">
             {[
-              { time: '00:12:34', event: 'New lead acquired from SECTOR-9', type: 'lead' },
-              { time: '00:08:21', event: 'Deal pipeline updated: QUANTUM-DEAL', type: 'deal' },
-              { time: '00:05:17', event: 'Neural sync completed with 3 contacts', type: 'sync' },
-              { time: '00:02:44', event: 'Task completed: Follow-up sequence', type: 'task' },
-              { time: '00:01:02', event: 'Email sequence initiated for LEAD-X42', type: 'email' },
-            ].map((activity, i) => (
-              <div key={i} className="flex items-center gap-4 p-3 rounded bg-cyan-500/5 border border-cyan-500/10 hover:border-cyan-500/30 transition-all radar-scan">
-                <span className="font-['Share_Tech_Mono'] text-xs text-cyan-400/50">{activity.time}</span>
-                <div className={`w-2 h-2 rounded-full ${
-                  activity.type === 'lead' ? 'bg-cyan-400' :
-                  activity.type === 'deal' ? 'bg-pink-400' :
-                  activity.type === 'sync' ? 'bg-green-400' :
-                  activity.type === 'task' ? 'bg-purple-400' : 'bg-orange-400'
+              { label: 'New Leads', count: stageBreakdown.lead, type: 'lead', color: 'cyan' },
+              { label: 'Qualified', count: stageBreakdown.qualified, type: 'qualified', color: 'blue' },
+              { label: 'Proposal', count: stageBreakdown.proposal, type: 'proposal', color: 'purple' },
+              { label: 'Negotiation', count: stageBreakdown.negotiation, type: 'negotiation', color: 'orange' },
+              { label: 'Closed Won', count: stageBreakdown.closed, type: 'closed', color: 'green' },
+            ].map((stage, i) => (
+              <div key={i} className="flex items-center gap-4 p-3 rounded bg-cyan-500/5 border border-cyan-500/10 hover:border-cyan-500/30 transition-all">
+                <div className={`w-3 h-3 rounded-full ${
+                  stage.color === 'cyan' ? 'bg-cyan-400' :
+                  stage.color === 'blue' ? 'bg-blue-400' :
+                  stage.color === 'purple' ? 'bg-purple-400' :
+                  stage.color === 'orange' ? 'bg-orange-400' : 'bg-green-400'
                 }`} />
-                <span className="font-['Rajdhani'] text-sm text-cyan-400/80">{activity.event}</span>
+                <span className="font-['Rajdhani'] text-sm text-cyan-400/80 flex-1">{stage.label}</span>
+                <span className="font-['Orbitron'] text-lg text-cyan-400">{stage.count}</span>
+                <div className="w-24 h-2 bg-gray-800 rounded-full overflow-hidden">
+                  <div 
+                    className={`h-full ${
+                      stage.color === 'cyan' ? 'bg-cyan-400' :
+                      stage.color === 'blue' ? 'bg-blue-400' :
+                      stage.color === 'purple' ? 'bg-purple-400' :
+                      stage.color === 'orange' ? 'bg-orange-400' : 'bg-green-400'
+                    }`}
+                    style={{ width: `${totalProfiles > 0 ? (stage.count / totalProfiles) * 100 : 0}%` }}
+                  />
+                </div>
               </div>
             ))}
           </div>

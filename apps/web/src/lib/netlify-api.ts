@@ -159,10 +159,10 @@ export const netlifyApi = {
   /**
    * Import CSV data
    */
-  async importCSV(csvText: string, filename?: string): Promise<ImportResult> {
+  async importCSV(csvText: string, filename?: string, pipelineId?: string): Promise<ImportResult> {
     return fetchFunction<ImportResult>('import_csv', {
       method: 'POST',
-      body: JSON.stringify({ csv_text: csvText, filename }),
+      body: JSON.stringify({ csv_text: csvText, filename, pipeline_id: pipelineId }),
     });
   },
 
@@ -256,7 +256,27 @@ export const netlifyApi = {
    * Get pipelines
    */
   async getPipelines(): Promise<{ pipelines: Pipeline[] }> {
-    return fetchFunction('pipelines');
+    return fetchFunction('manage_pipelines');
+  },
+
+  /**
+   * Create a new pipeline
+   */
+  async createPipeline(data: { name: string; color?: string; description?: string }): Promise<{ pipeline: Pipeline }> {
+    return fetchFunction('manage_pipelines', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  /**
+   * Delete a pipeline
+   */
+  async deletePipeline(pipelineId: string): Promise<{ success: boolean; message: string }> {
+    return fetchFunction('manage_pipelines', {
+      method: 'DELETE',
+      body: JSON.stringify({ pipeline_id: pipelineId }),
+    });
   },
 
   /**

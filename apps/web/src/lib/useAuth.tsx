@@ -6,8 +6,7 @@
  */
 
 import { useState, useEffect, useCallback, createContext, useContext, ReactNode, useMemo } from 'react';
-import { supabase } from './supabaseClient';
-import { signIn, signUp, signOut, getSession, type User, type Session, type AuthResult } from './supabase-auth';
+import { signIn, signUp, signOut, getSession, onAuthStateChange, type User, type Session, type AuthResult } from './supabase-auth';
 import { setNetlifyAuth, clearNetlifyAuth } from './netlify-api';
 
 /**
@@ -91,8 +90,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
     initializeAuth();
 
     // Subscribe to auth state changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, newSession) => {
+    const unsubscribe = onAuthStateChange(
+      (event: string, newSession: Session | null) => {
         if (!mounted) return;
 
         console.log('Auth state changed:', event);
@@ -119,19 +118,29 @@ export function AuthProvider({ children }: AuthProviderProps) {
     // Cleanup subscription on unmount
     return () => {
       mounted = false;
-      subscription.unsubscribe();
+      unsubscribe();
     };
   }, []);
 
   // Login handler
   const login = useCallback(async (email: string, password: string): Promise<AuthResult> => {
     const result = await signIn(email, password);
+    if (result.success && result.user && result.session) {
+      setUser(result.user);
+      setSession(result.session);
+      setNetlifyAuth(result.user.email, result.user.id);
+    }
     return result;
   }, []);
 
   // Register handler
   const register = useCallback(async (email: string, password: string): Promise<AuthResult> => {
     const result = await signUp(email, password);
+    if (result.success && result.user && result.session) {
+      setUser(result.user);
+      setSession(result.session);
+      setNetlifyAuth(result.user.email, result.user.id);
+    }
     return result;
   }, []);
 

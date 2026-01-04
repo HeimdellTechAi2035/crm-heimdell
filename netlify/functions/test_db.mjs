@@ -51,6 +51,14 @@ export async function handler(event, context) {
     const sql = neon(databaseUrl);
     const result = await sql`SELECT NOW() as time, current_database() as db`;
     
+    // Check profiles count and sample user IDs
+    const profileStats = await sql`
+      SELECT user_id, COUNT(*) as count 
+      FROM business_profiles 
+      GROUP BY user_id 
+      LIMIT 10
+    `;
+    
     return {
       statusCode: 200,
       headers: corsHeaders,
@@ -58,6 +66,7 @@ export async function handler(event, context) {
         success: true,
         message: 'Database connection successful!',
         connection: urlInfo,
+        profilesByUser: profileStats,
         data: result[0]
       })
     };

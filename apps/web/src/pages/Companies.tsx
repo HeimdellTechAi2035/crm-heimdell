@@ -89,6 +89,7 @@ export function Companies() {
       queryClient.invalidateQueries({ queryKey: ['companies'] });
       queryClient.invalidateQueries({ queryKey: ['leads'] });
       queryClient.invalidateQueries({ queryKey: ['deals'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       setSelectedCompany(null);
     },
   });

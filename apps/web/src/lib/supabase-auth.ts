@@ -1,19 +1,33 @@
 /**
- * Supabase Authentication Utilities
- * 
- * Production-ready auth functions using Supabase Auth.
- * All operations use the anon key and rely on RLS for security.
+ * Authentication Utilities for Heimdell CRM
+ * Real multi-user authentication using Netlify Functions + Neon Postgres
  */
 
-import { supabase } from './supabaseClient';
-import type { User, Session, AuthError } from '@supabase/supabase-js';
+import { 
+  authSignIn, 
+  authSignUp, 
+  authSignOut, 
+  getCurrentUser, 
+  getAuthToken,
+  isLoggedIn,
+  type User 
+} from './supabaseClient';
 
-// Re-export types for convenience
-export type { User, Session, AuthError };
+// Re-export User type
+export type { User };
 
-/**
- * Sign in result type
- */
+export interface Session {
+  user: User;
+  access_token: string;
+  refresh_token: string;
+  expires_in: number;
+  token_type: string;
+}
+
+export interface AuthError {
+  message: string;
+}
+
 export interface AuthResult {
   success: boolean;
   user: User | null;
@@ -25,208 +39,132 @@ export interface AuthResult {
  * Sign in with email and password
  */
 export async function signIn(email: string, password: string): Promise<AuthResult> {
-  try {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email: email.trim().toLowerCase(),
-      password,
-    });
-
-    if (error) {
-      return {
-        success: false,
-        user: null,
-        session: null,
-        error: getAuthErrorMessage(error),
-      };
-    }
-
-    return {
-      success: true,
-      user: data.user,
-      session: data.session,
-      error: null,
-    };
-  } catch (err) {
+  const result = await authSignIn(email, password);
+  
+  if (!result.success || !result.user) {
     return {
       success: false,
       user: null,
       session: null,
-      error: 'An unexpected error occurred. Please try again.',
+      error: result.error || 'Login failed',
     };
   }
+  
+  const token = getAuthToken() || '';
+  
+  return {
+    success: true,
+    user: result.user,
+    session: {
+      user: result.user,
+      access_token: token,
+      refresh_token: token,
+      expires_in: 604800, // 7 days
+      token_type: 'bearer',
+    },
+    error: null,
+  };
 }
 
 /**
  * Sign up with email and password
- * 
- * Note: Depending on Supabase settings, email confirmation may be required.
  */
-export async function signUp(email: string, password: string): Promise<AuthResult> {
-  try {
-    const { data, error } = await supabase.auth.signUp({
-      email: email.trim().toLowerCase(),
-      password,
-      options: {
-        // Redirect URL after email confirmation (if enabled)
-        emailRedirectTo: `${window.location.origin}/`,
-      },
-    });
-
-    if (error) {
-      return {
-        success: false,
-        user: null,
-        session: null,
-        error: getAuthErrorMessage(error),
-      };
-    }
-
-    // Check if email confirmation is required
-    // When confirmation is required, session will be null but user will exist
-    const needsConfirmation = data.user && !data.session;
-
-    return {
-      success: true,
-      user: data.user,
-      session: data.session,
-      error: needsConfirmation 
-        ? 'Please check your email to confirm your account.'
-        : null,
-    };
-  } catch (err) {
+export async function signUp(email: string, password: string, name?: string): Promise<AuthResult> {
+  const result = await authSignUp(email, password, name);
+  
+  if (!result.success || !result.user) {
     return {
       success: false,
       user: null,
       session: null,
-      error: 'An unexpected error occurred. Please try again.',
+      error: result.error || 'Signup failed',
     };
   }
+  
+  const token = getAuthToken() || '';
+  
+  return {
+    success: true,
+    user: result.user,
+    session: {
+      user: result.user,
+      access_token: token,
+      refresh_token: token,
+      expires_in: 604800,
+      token_type: 'bearer',
+    },
+    error: null,
+  };
 }
 
 /**
- * Sign out the current user
- * Clears all session data from localStorage
+ * Sign out
  */
 export async function signOut(): Promise<{ success: boolean; error: string | null }> {
-  try {
-    const { error } = await supabase.auth.signOut();
-
-    if (error) {
-      return {
-        success: false,
-        error: getAuthErrorMessage(error),
-      };
-    }
-
-    return { success: true, error: null };
-  } catch (err) {
-    return {
-      success: false,
-      error: 'Failed to sign out. Please try again.',
-    };
-  }
+  authSignOut();
+  return { success: true, error: null };
 }
 
 /**
  * Get the current session
- * Returns null if not authenticated
  */
 export async function getSession(): Promise<Session | null> {
-  try {
-    const { data: { session } } = await supabase.auth.getSession();
-    return session;
-  } catch {
-    return null;
-  }
+  const user = getCurrentUser();
+  const token = getAuthToken();
+  
+  if (!user || !token) return null;
+  
+  return {
+    user,
+    access_token: token,
+    refresh_token: token,
+    expires_in: 604800,
+    token_type: 'bearer',
+  };
 }
 
 /**
  * Get the current user
- * Returns null if not authenticated
  */
 export async function getUser(): Promise<User | null> {
-  try {
-    const { data: { user } } = await supabase.auth.getUser();
-    return user;
-  } catch {
-    return null;
-  }
+  return getCurrentUser();
 }
 
 /**
- * Refresh the current session
- * Useful to get a fresh JWT before making important API calls
+ * Refresh the current session (no-op for now)
  */
 export async function refreshSession(): Promise<Session | null> {
-  try {
-    const { data: { session }, error } = await supabase.auth.refreshSession();
-    if (error) return null;
-    return session;
-  } catch {
-    return null;
-  }
+  return getSession();
 }
 
 /**
- * Send password reset email
+ * Send password reset email (not implemented)
  */
-export async function resetPassword(email: string): Promise<{ success: boolean; error: string | null }> {
-  try {
-    const { error } = await supabase.auth.resetPasswordForEmail(
-      email.trim().toLowerCase(),
-      {
-        redirectTo: `${window.location.origin}/reset-password`,
-      }
-    );
-
-    if (error) {
-      return {
-        success: false,
-        error: getAuthErrorMessage(error),
-      };
-    }
-
-    return { success: true, error: null };
-  } catch (err) {
-    return {
-      success: false,
-      error: 'Failed to send reset email. Please try again.',
-    };
-  }
-}
-
-/**
- * Convert Supabase auth errors to user-friendly messages
- */
-function getAuthErrorMessage(error: AuthError): string {
-  const errorMessages: Record<string, string> = {
-    'Invalid login credentials': 'Invalid email or password.',
-    'Email not confirmed': 'Please verify your email address before signing in.',
-    'User already registered': 'An account with this email already exists.',
-    'Password should be at least 6 characters': 'Password must be at least 6 characters.',
-    'Signup is disabled': 'New registrations are currently disabled.',
-    'Email rate limit exceeded': 'Too many attempts. Please try again later.',
-    'Invalid email': 'Please enter a valid email address.',
-  };
-
-  // Check for known error messages
-  for (const [key, message] of Object.entries(errorMessages)) {
-    if (error.message.includes(key)) {
-      return message;
-    }
-  }
-
-  // Return the original message if no mapping found
-  return error.message || 'Authentication failed. Please try again.';
+export async function resetPassword(_email: string): Promise<{ success: boolean; error: string | null }> {
+  return { success: false, error: 'Password reset not yet implemented' };
 }
 
 /**
  * Subscribe to auth state changes
- * Returns an unsubscribe function
  */
 export function onAuthStateChange(
   callback: (event: string, session: Session | null) => void
 ): () => void {
-  const { data: { subscription } } = supabase.auth.onAuthStateChange(callback);
-  return () => subscription.unsubscribe();
+  // Check current state immediately
+  const checkAuth = async () => {
+    const session = await getSession();
+    callback(session ? 'SIGNED_IN' : 'SIGNED_OUT', session);
+  };
+  
+  setTimeout(checkAuth, 0);
+  
+  // Return unsubscribe function
+  return () => {};
 }
+
+/**
+ * Check if logged in
+ */
+export { isLoggedIn };
+
+

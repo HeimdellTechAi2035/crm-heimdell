@@ -52,7 +52,7 @@ export async function handler(event) {
 
   try {
     const params = event.queryStringParameters || {};
-    const { userId, category, search, limit = '500' } = params;
+    const { userId, category, search, limit = '500', pipeline_id } = params;
     
     if (!userId) {
       return errorResponse('userId query parameter is required', 400);
@@ -61,9 +61,71 @@ export async function handler(event) {
     const sql = getDb();
     const maxLimit = Math.min(parseInt(limit, 10) || 500, 1000);
     
+    // Build query with optional filters
     let profiles;
     
-    if (category && search) {
+    // If pipeline_id is specified, filter by it (default is 'default' or null)
+    const pipelineFilter = pipeline_id ? pipeline_id : null;
+    
+    if (pipelineFilter && category && search) {
+      const searchPattern = `%${search}%`;
+      profiles = await sql`
+        SELECT 
+          id, user_id, name, address, phone, website, map_url,
+          category, reviews, rating, ranking, avg_position,
+          market_share, photos_count, dedupe_key, source, 
+          import_batch_id, meta, pipeline_id, created_at, updated_at
+        FROM business_profiles
+        WHERE user_id = ${userId}
+          AND (pipeline_id = ${pipelineFilter} OR (${pipelineFilter} = 'default' AND pipeline_id IS NULL))
+          AND category = ${category}
+          AND (name ILIKE ${searchPattern} OR address ILIKE ${searchPattern})
+        ORDER BY created_at DESC
+        LIMIT ${maxLimit}
+      `;
+    } else if (pipelineFilter && category) {
+      profiles = await sql`
+        SELECT 
+          id, user_id, name, address, phone, website, map_url,
+          category, reviews, rating, ranking, avg_position,
+          market_share, photos_count, dedupe_key, source, 
+          import_batch_id, meta, pipeline_id, created_at, updated_at
+        FROM business_profiles
+        WHERE user_id = ${userId} 
+          AND (pipeline_id = ${pipelineFilter} OR (${pipelineFilter} = 'default' AND pipeline_id IS NULL))
+          AND category = ${category}
+        ORDER BY created_at DESC
+        LIMIT ${maxLimit}
+      `;
+    } else if (pipelineFilter && search) {
+      const searchPattern = `%${search}%`;
+      profiles = await sql`
+        SELECT 
+          id, user_id, name, address, phone, website, map_url,
+          category, reviews, rating, ranking, avg_position,
+          market_share, photos_count, dedupe_key, source, 
+          import_batch_id, meta, pipeline_id, created_at, updated_at
+        FROM business_profiles
+        WHERE user_id = ${userId}
+          AND (pipeline_id = ${pipelineFilter} OR (${pipelineFilter} = 'default' AND pipeline_id IS NULL))
+          AND (name ILIKE ${searchPattern} OR address ILIKE ${searchPattern})
+        ORDER BY created_at DESC
+        LIMIT ${maxLimit}
+      `;
+    } else if (pipelineFilter) {
+      profiles = await sql`
+        SELECT 
+          id, user_id, name, address, phone, website, map_url,
+          category, reviews, rating, ranking, avg_position,
+          market_share, photos_count, dedupe_key, source, 
+          import_batch_id, meta, pipeline_id, created_at, updated_at
+        FROM business_profiles
+        WHERE user_id = ${userId}
+          AND (pipeline_id = ${pipelineFilter} OR (${pipelineFilter} = 'default' AND pipeline_id IS NULL))
+        ORDER BY created_at DESC
+        LIMIT ${maxLimit}
+      `;
+    } else if (category && search) {
       const searchPattern = `%${search}%`;
       profiles = await sql`
         SELECT 

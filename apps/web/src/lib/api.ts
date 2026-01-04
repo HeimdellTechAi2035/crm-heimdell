@@ -208,21 +208,31 @@ class LocalApiClient {
   }
 
   async deleteLead(id: string) {
-    // Get lead to find profileId for cascade delete
+    // Get lead to find profileId for database delete
     const lead = localDb.leads.get(id);
-    if (!lead) throw new Error('Lead not found');
+    const profileId = lead?.profileId || id.replace('lead-', '');
     
-    const profileId = lead.profileId;
-    
-    // Cascade delete: remove linked company and deal
+    // Delete from Netlify DB (Neon Postgres)
     if (profileId) {
+      try {
+        await callNetlifyFunction('delete_profile', {
+          method: 'DELETE',
+          params: { id: profileId }
+        });
+        console.log('Deleted from database:', profileId);
+      } catch (err) {
+        console.error('Failed to delete from database:', err);
+        // Continue with local delete even if DB delete fails
+      }
+      
+      // Cascade delete linked company and deal from local storage
       const companyId = `company-${profileId}`;
       const dealId = `deal-${profileId}`;
       localDb.companies.delete(companyId);
       localDb.deals.delete(dealId);
     }
     
-    // Delete the lead
+    // Delete the lead from local storage
     localDb.leads.delete(id);
     return { success: true };
   }
@@ -298,34 +308,50 @@ class LocalApiClient {
   }
 
   async deleteCompany(id: string) {
-    // Get company to find profileId for cascade delete
+    // Get company to find profileId for database delete
     const company = localDb.companies.get(id);
     if (!company) throw new Error('Company not found');
     
     const profileId = company.profileId;
     
-    // Cascade delete: remove linked lead and deal
+    // Delete from Netlify DB (Neon Postgres)
     if (profileId) {
+      try {
+        await callNetlifyFunction('delete_profile', {
+          method: 'DELETE',
+          params: { id: profileId }
+        });
+      } catch (err) {
+        console.error('Failed to delete from database:', err);
+        // Continue with local delete even if DB delete fails
+      }
+      
+      // Cascade delete from local storage
       const leadId = `lead-${profileId}`;
       const dealId = `deal-${profileId}`;
       localDb.leads.delete(leadId);
       localDb.deals.delete(dealId);
     }
     
-    // Delete the company
+    // Delete the company from local storage
     localDb.companies.delete(id);
     return { success: true };
   }
 
   // Deals - Now fetches from Netlify DB (business_profiles) and converts to deal format
-  async getDeals(_params?: any) {
+  async getDeals(params?: { pipeline_id?: string }) {
     try {
       // Try to fetch from Netlify DB first
       const userId = getCurrentUserIdSync();
       if (userId) {
+        const queryParams: any = { userId };
+        if (params?.pipeline_id) {
+          queryParams.pipeline_id = params.pipeline_id;
+        }
+        
         const dbResult = await callNetlifyFunction('list_profiles', {
           method: 'GET',
-          params: { userId },
+          params: queryParams,
         });
         
         if (dbResult?.profiles && Array.isArray(dbResult.profiles)) {
@@ -431,23 +457,50 @@ class LocalApiClient {
   }
 
   async deleteDeal(id: string) {
-    // Get deal to find profileId for cascade delete
-    const deal = localDb.deals.get(id);
-    if (!deal) throw new Error('Deal not found');
+    // Extract profileId from deal ID (format: deal-{uuid})
+    const profileId = id.replace('deal-', '');
+    console.log('deleteDeal called with id:', id, '-> profileId:', profileId);
     
-    const profileId = deal.profileId;
-    
-    // Cascade delete: remove linked lead and company
-    if (profileId) {
-      const leadId = `lead-${profileId}`;
-      const companyId = `company-${profileId}`;
-      localDb.leads.delete(leadId);
-      localDb.companies.delete(companyId);
+    // Delete from Netlify DB (Neon Postgres)
+    if (profileId && profileId !== id) {
+      try {
+        const result = await callNetlifyFunction('delete_profile', {
+          method: 'DELETE',
+          params: { id: profileId }
+        });
+        console.log('Delete result from database:', result);
+      } catch (err) {
+        console.error('Failed to delete from database:', err);
+        throw err; // Re-throw to trigger error handling
+      }
+    } else {
+      console.warn('No valid profileId found for deal:', id);
     }
     
-    // Delete the deal
+    // Cascade delete from local storage (in case any cached)
+    const leadId = `lead-${profileId}`;
+    const companyId = `company-${profileId}`;
+    localDb.leads.delete(leadId);
+    localDb.companies.delete(companyId);
     localDb.deals.delete(id);
-    return { success: true };
+    
+    return { success: true, deleted: profileId };
+  }
+
+  async bulkUpdateValues(value: number, stage?: string) {
+    // Call Netlify function to bulk update all deals
+    return callNetlifyFunction('bulk_update_values', {
+      method: 'POST',
+      body: { value, stage }
+    });
+  }
+
+  async createPipeline(name: string) {
+    // Call Netlify function to create a new pipeline
+    return callNetlifyFunction('manage_pipelines', {
+      method: 'POST',
+      body: { name }
+    });
   }
 
   async moveDeal(id: string, stageId: string) {
@@ -484,19 +537,35 @@ class LocalApiClient {
     return updated;
   }
 
-  // Pipelines - Return static demo data
+  // Pipelines - Fetch from Netlify DB
   async getPipelines() {
+    try {
+      const userId = getCurrentUserIdSync();
+      if (userId) {
+        const result = await callNetlifyFunction('manage_pipelines', {
+          method: 'GET',
+        });
+        
+        if (result?.success && result.pipelines) {
+          return { pipelines: result.pipelines };
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to fetch pipelines from Netlify, using defaults:', error);
+    }
+    
+    // Fallback to default pipeline
     return {
       pipelines: [
         {
           id: 'default',
-          name: 'Sales Pipeline',
+          name: 'Main Pipeline',
+          profile_count: 0,
           stages: [
             { id: 'lead', name: 'Lead', order: 1 },
             { id: 'qualified', name: 'Qualified', order: 2 },
-            { id: 'proposal', name: 'Proposal', order: 3 },
-            { id: 'negotiation', name: 'Negotiation', order: 4 },
-            { id: 'closed', name: 'Closed', order: 5 },
+            { id: 'negotiation', name: 'Negotiation', order: 3 },
+            { id: 'closed', name: 'Closed', order: 4 },
           ],
         },
       ],
@@ -506,13 +575,13 @@ class LocalApiClient {
   async getPipelineBoard(id: string) {
     const deals = localDb.deals.getAll();
     const pipelines = await this.getPipelines();
-    const pipeline = pipelines.pipelines.find(p => p.id === id) || pipelines.pipelines[0];
+    const pipeline = pipelines.pipelines.find((p: any) => p.id === id) || pipelines.pipelines[0];
     
     return {
       pipeline,
       deals: deals.map(d => ({
         ...d,
-        stage: pipeline.stages.find(s => s.id === d.stageId) || pipeline.stages[0],
+        stage: pipeline.stages.find((s: any) => s.id === d.stageId) || pipeline.stages[0],
       })),
     };
   }
@@ -757,8 +826,63 @@ class LocalApiClient {
 
   // Dashboard
   async getDashboard(_params?: any) {
+    try {
+      // Fetch real data from database
+      const userId = getCurrentUserIdSync();
+      if (userId) {
+        // Get deals data to calculate metrics
+        const dealsResult = await this.getDeals();
+        const deals = dealsResult?.deals || [];
+        
+        // Calculate real metrics from database
+        const totalLeads = deals.filter((d: any) => d.stageId === 'lead').length;
+        const qualifiedLeads = deals.filter((d: any) => d.stageId === 'qualified').length;
+        const proposalDeals = deals.filter((d: any) => d.stageId === 'proposal').length;
+        const negotiationDeals = deals.filter((d: any) => d.stageId === 'negotiation').length;
+        const closedDeals = deals.filter((d: any) => d.stageId === 'closed').length;
+        const totalValue = deals.reduce((sum: number, d: any) => sum + (d.value || 0), 0);
+        const wonValue = deals.filter((d: any) => d.stageId === 'closed').reduce((sum: number, d: any) => sum + (d.value || 0), 0);
+        const activeDeals = deals.filter((d: any) => d.stageId !== 'closed').length;
+        const winRate = deals.length > 0 ? (closedDeals / deals.length) * 100 : 0;
+        
+        return {
+          metrics: {
+            overview: {
+              newLeads: totalLeads,
+              contactedLeads: qualifiedLeads,
+              totalPipelineValue: totalValue,
+              dealsCreated: activeDeals,
+              dealsWon: closedDeals,
+              wonValue: wonValue,
+              winRate: winRate,
+              avgTimeToClose: closedDeals > 0 ? 7 : 0,
+            },
+            taskStats: {
+              todo: 0,
+              completed: 0,
+            },
+            stageBreakdown: {
+              lead: totalLeads,
+              qualified: qualifiedLeads,
+              proposal: proposalDeals,
+              negotiation: negotiationDeals,
+              closed: closedDeals,
+            },
+          },
+          totalLeads: deals.length,
+          totalDeals: activeDeals,
+          totalCompanies: deals.length,
+          totalTasks: 0,
+          openTasks: 0,
+          pipelineValue: totalValue,
+        };
+      }
+    } catch (error) {
+      console.warn('Failed to fetch dashboard from DB:', error);
+    }
+    
+    // Fallback to localStorage
     const stats = localDb.dashboard.getStats();
-    // Return in the format expected by the Dashboard component
     return {
       metrics: {
         overview: {
@@ -785,7 +909,12 @@ class LocalApiClient {
     // Route to appropriate method based on endpoint
     if (endpoint.includes('/leads')) return this.getLeads();
     if (endpoint.includes('/companies')) return this.getCompanies();
-    if (endpoint.includes('/deals')) return this.getDeals();
+    if (endpoint.includes('/deals')) {
+      // Parse pipeline_id from query string if present
+      const url = new URL(endpoint, 'http://localhost');
+      const pipelineId = url.searchParams.get('pipeline_id');
+      return this.getDeals(pipelineId ? { pipeline_id: pipelineId } : undefined);
+    }
     if (endpoint.includes('/tasks')) return this.getTasks();
     if (endpoint.includes('/activities')) return this.getActivities();
     if (endpoint.includes('/dashboard')) return this.getDashboard();

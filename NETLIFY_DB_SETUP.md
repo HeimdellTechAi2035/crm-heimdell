@@ -1,3 +1,4 @@
+
 # Netlify DB Integration
 
 This document describes how to set up and use the Netlify DB (Neon Postgres) integration for Heimdell CRM.
