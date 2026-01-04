@@ -310,6 +310,11 @@ export class CSVImportEngine {
       // Additional data
       photosCount: rowData.photosCount,
       description: rowData.description,
+      
+      // Status and source tracking
+      status: rowData.status,
+      searchQuery: rowData.searchQuery,
+      
       rawData: rowData.rawData,
     };
     

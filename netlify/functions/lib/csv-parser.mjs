@@ -140,11 +140,12 @@ export function normalizeCompanyName(name) {
 export function mapCSVRowToFields(row, headers) {
   // Define known column mappings (CSV column -> DB field)
   const columnMappings = {
-    // Company name variations
+    // Company name variations (including Google Maps export 'title')
     'place/name': 'name',
     'company_name': 'name',
     'company': 'name',
     'name': 'name',
+    'title': 'name',
     'business_name': 'name',
     
     // Website variations
@@ -154,10 +155,11 @@ export function mapCSVRowToFields(row, headers) {
     'url': 'website',
     'site': 'website',
     
-    // Phone variations
+    // Phone variations (including Google Maps export 'phonenumber')
     'place/phone': 'phone',
     'phone': 'phone',
     'phone_number': 'phone',
+    'phonenumber': 'phone',
     'telephone': 'phone',
     'tel': 'phone',
     
@@ -166,6 +168,15 @@ export function mapCSVRowToFields(row, headers) {
     'address': 'address',
     'location': 'address',
     'full_address': 'address',
+    
+    // Map URL / Place URL (Google Maps link)
+    'place/map_url': 'map_url',
+    'map_url': 'map_url',
+    'placeurl': 'map_url',
+    'place_url': 'map_url',
+    'google_maps_url': 'map_url',
+    'google_maps': 'map_url',
+    'maps_url': 'map_url',
     
     // Ranking variations
     'place/ranking': 'ranking',
@@ -180,9 +191,10 @@ export function mapCSVRowToFields(row, headers) {
     'area': 'market',
     'region': 'market',
     
-    // Review count
+    // Review count (including Google Maps export 'reviewcount')
     'place/review_count': 'review_count',
     'review_count': 'review_count',
+    'reviewcount': 'review_count',
     'reviews': 'review_count',
     'num_reviews': 'review_count',
     
@@ -198,6 +210,23 @@ export function mapCSVRowToFields(row, headers) {
     'main_category': 'main_category',
     'category': 'main_category',
     'industry': 'main_category',
+    
+    // Description / Subtitle
+    'description': 'description',
+    'subtitle': 'description',
+    'about': 'description',
+    'summary': 'description',
+    
+    // Status
+    'status': 'status',
+    'lead_status': 'status',
+    'state': 'status',
+    
+    // Search Query (for tracking source)
+    'searchquery': 'search_query',
+    'search_query': 'search_query',
+    'query': 'search_query',
+    'keyword': 'search_query',
     'type': 'main_category',
   };
 

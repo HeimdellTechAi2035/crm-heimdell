@@ -25,7 +25,7 @@ const HEADER_MAPPINGS: Record<string, string[]> = {
   // Phone
   phone: [
     'place/phone', 'phone', 'tel', 'telephone', 'mobile', 'contact', 'phone_number',
-    'phonenumber', 'contact_number', 'Phone', 'Telephone', 'Mobile', 'Contact'
+    'phonenumber', 'contact_number', 'phoneNumber', 'Phone', 'Telephone', 'Mobile', 'Contact'
   ],
   // Website
   website: [
@@ -55,17 +55,18 @@ const HEADER_MAPPINGS: Record<string, string[]> = {
   // Review count
   reviewCount: [
     'place/review_count', 'reviews', 'review_count', 'reviewcount', 'num_reviews',
-    'total_reviews', 'Reviews', 'Review Count'
+    'total_reviews', 'Reviews', 'Review Count', 'reviewCount'
   ],
-  // Map URL
+  // Map URL / Place URL (Google Maps link)
   mapUrl: [
     'place/map_url', 'map_url', 'google_maps', 'maps_link', 'map_link',
-    'Map URL', 'Google Maps', 'Maps Link'
+    'placeUrl', 'place_url', 'google_map_url', 'googleMapsUrl',
+    'Map URL', 'Google Maps', 'Maps Link', 'Place URL'
   ],
-  // Description
+  // Description / Subtitle
   description: [
     'description', 'about', 'bio', 'summary', 'overview', 'details',
-    'Description', 'About', 'Bio', 'Summary'
+    'subtitle', 'Subtitle', 'Description', 'About', 'Bio', 'Summary'
   ],
   // Ranking (place/ranking)
   ranking: [
@@ -82,6 +83,15 @@ const HEADER_MAPPINGS: Record<string, string[]> = {
   // Photos Count
   photosCount: [
     'photos_count', 'photoscount', 'photos', 'photo_count', 'Photos Count', 'Photos'
+  ],
+  // Status
+  status: [
+    'status', 'state', 'lead_status', 'Status', 'State', 'Lead Status'
+  ],
+  // Search Query (for tracking which search produced this lead)
+  searchQuery: [
+    'searchQuery', 'search_query', 'query', 'search', 'keyword', 'keywords',
+    'Search Query', 'Query', 'Search', 'Keyword'
   ],
 };
 
@@ -277,6 +287,8 @@ export interface ExtractedRowData {
   marketShare: number | null;
   averagePosition: number | null;
   photosCount: number;
+  status: string;
+  searchQuery: string;
   rawData: Record<string, string>;
   dedupeKey: string;
 }
@@ -309,6 +321,10 @@ export function extractRowData(row: Record<string, string>, index: number): Extr
   const photosCountStr = findFieldValue(row, 'photosCount');
   const photosCount = photosCountStr ? parseInt(photosCountStr, 10) : 0;
   
+  // Additional fields from Google Maps CSV exports
+  const status = findFieldValue(row, 'status');
+  const searchQuery = findFieldValue(row, 'searchQuery');
+  
   const dedupeKey = getCompanyDedupeKey(companyName, website);
   
   return {
@@ -326,6 +342,8 @@ export function extractRowData(row: Record<string, string>, index: number): Extr
     marketShare: isNaN(marketShare as number) ? null : marketShare,
     averagePosition: isNaN(averagePosition as number) ? null : averagePosition,
     photosCount: isNaN(photosCount) ? 0 : photosCount,
+    status,
+    searchQuery,
     rawData: row,
     dedupeKey,
   };

@@ -99,18 +99,22 @@ function parseCSV(csvText) {
 // Map CSV row to profile object
 function mapRowToProfile(row, index) {
   // Auto-detect column mappings (handle various naming conventions)
-  const getName = () => row['place/name'] || row['name'] || row['business_name'] || row['businessname'] || row['company'] || '';
+  // Support for Google Maps export CSVs with title, placeUrl, phoneNumber, etc.
+  const getName = () => row['place/name'] || row['name'] || row['title'] || row['business_name'] || row['businessname'] || row['company'] || '';
   const getAddress = () => row['place/address'] || row['address'] || row['full_address'] || row['location'] || '';
-  const getPhone = () => row['place/phone'] || row['phone'] || row['telephone'] || row['phone_number'] || '';
+  const getPhone = () => row['place/phone'] || row['phone'] || row['phonenumber'] || row['telephone'] || row['phone_number'] || '';
   const getWebsite = () => row['place/website_url'] || row['website'] || row['url'] || row['website_url'] || '';
-  const getMapUrl = () => row['place/map_url'] || row['map_url'] || row['google_maps_url'] || row['maps_url'] || '';
+  const getMapUrl = () => row['place/map_url'] || row['map_url'] || row['placeurl'] || row['google_maps_url'] || row['maps_url'] || row['place_url'] || '';
   const getCategory = () => row['place/main_category'] || row['category'] || row['main_category'] || row['type'] || '';
-  const getReviews = () => row['place/review_count'] || row['review_count'] || row['reviews'] || row['num_reviews'] || '0';
+  const getReviews = () => row['place/review_count'] || row['review_count'] || row['reviewcount'] || row['reviews'] || row['num_reviews'] || '0';
   const getRating = () => row['place/ave_review_rating'] || row['rating'] || row['review_rating'] || row['stars'] || '';
   const getRanking = () => row['place/ranking'] || row['ranking'] || row['rank'] || row['position'] || '';
   const getAvgPosition = () => row['average_position'] || row['avg_position'] || row['avgposition'] || '';
   const getMarketShare = () => row['market_share'] || row['marketshare'] || row['share'] || '';
   const getPhotosCount = () => row['photos_count'] || row['photoscount'] || row['photos'] || '0';
+  const getDescription = () => row['description'] || row['subtitle'] || row['about'] || row['summary'] || '';
+  const getStatus = () => row['status'] || row['lead_status'] || row['state'] || '';
+  const getSearchQuery = () => row['searchquery'] || row['search_query'] || row['query'] || row['keyword'] || '';
 
   const name = getName();
   if (!name) {
@@ -135,6 +139,9 @@ function mapRowToProfile(row, index) {
     avgPosition: parseFloat(getAvgPosition()) || null,
     marketShare: parseFloat(getMarketShare()) || null,
     photosCount: parseInt(getPhotosCount(), 10) || 0,
+    description: getDescription() || null,
+    status: getStatus() || null,
+    searchQuery: getSearchQuery() || null,
     dedupeKey,
     source: 'csv_import',
     meta: row // Store raw row data
