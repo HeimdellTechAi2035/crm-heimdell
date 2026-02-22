@@ -2,6 +2,10 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import fastifyJwt from '@fastify/jwt';
 import fastifyMultipart from '@fastify/multipart';
+import fastifyStatic from '@fastify/static';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { existsSync } from 'fs';
 import { config } from './config.js';
 
 // Phase 1 routes
@@ -95,6 +99,27 @@ async function buildServer() {
   // ─── Health check root ────────────────────────────────
 
   app.get('/api/ping', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));
+
+  // ─── Serve frontend static files in production ────────
+
+  const __dirname = path.dirname(fileURLToPath(import.meta.url));
+  const webDistPath = path.resolve(__dirname, '../../web/dist');
+
+  if (existsSync(webDistPath)) {
+    await app.register(fastifyStatic, {
+      root: webDistPath,
+      prefix: '/',
+      wildcard: false,
+    });
+
+    // SPA fallback: any non-API route serves index.html
+    app.setNotFoundHandler(async (request, reply) => {
+      if (request.url.startsWith('/api/')) {
+        return reply.status(404).send({ error: 'Not Found' });
+      }
+      return reply.sendFile('index.html');
+    });
+  }
 
   return app;
 }
