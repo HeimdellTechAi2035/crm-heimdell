@@ -3,37 +3,42 @@ import { FastifyRequest, FastifyReply } from 'fastify';
 export interface AuthenticatedUser {
   id: string;
   email: string;
-  role: string;
+  role: 'ADMIN' | 'OPERATOR' | 'VIEWER';
   organizationId: string;
 }
 
+declare module 'fastify' {
+  interface FastifyRequest {
+    user?: AuthenticatedUser;
+  }
+}
+
+/**
+ * Authentication middleware — verifies JWT and attaches user to request.
+ * Used as a preHandler on protected routes.
+ */
 export async function authenticate(request: FastifyRequest, reply: FastifyReply) {
   try {
-    await request.jwtVerify();
-    // Type assertion since JWT adds user property
+    const decoded = await request.jwtVerify<AuthenticatedUser>();
+    request.user = decoded;
   } catch (err) {
     reply.code(401).send({ error: 'Unauthorized' });
   }
 }
 
-export function authorize(...roles: string[]) {
+/**
+ * Authorization middleware factory — checks user role.
+ * Usage: authorize('ADMIN', 'MANAGER')
+ */
+export function authorize(...allowedRoles: string[]) {
   return async (request: FastifyRequest, reply: FastifyReply) => {
-    const user = request.user as any;
-    if (!user) {
+    // authenticate must run first
+    if (!request.user) {
       return reply.code(401).send({ error: 'Unauthorized' });
     }
 
-    if (roles.length > 0 && !roles.includes(user.role)) {
-      return reply.code(403).send({ error: 'Forbidden' });
+    if (!allowedRoles.includes(request.user.role)) {
+      return reply.code(403).send({ error: 'Forbidden — insufficient permissions' });
     }
   };
 }
-
-// Alias for backward compatibility
-export const requireRole = authorize;
-
-// Register authenticate decorator
-export function registerAuthDecorator(app: any) {
-  app.decorate('authenticate', authenticate);
-}
-

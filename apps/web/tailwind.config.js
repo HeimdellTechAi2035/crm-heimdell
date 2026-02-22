@@ -7,6 +7,21 @@ export default {
     './app/**/*.{ts,tsx}',
     './src/**/*.{ts,tsx}',
   ],
+  safelist: [
+    // Dynamic color classes used in Deals, Tasks, Sequences, Reports
+    ...['cyan', 'blue', 'purple', 'green', 'orange'].flatMap(color => [
+      `text-${color}-400`,
+      `bg-${color}-500/10`,
+      `bg-${color}-500/5`,
+      `bg-${color}-400/30`,
+      `border-${color}-400/50`,
+      `border-${color}-500/20`,
+      `border-${color}-500/30`,
+      `from-${color}-500/5`,
+      `from-${color}-500/50`,
+      `to-${color}-400/30`,
+    ]),
+  ],
   theme: {
     container: {
       center: true,

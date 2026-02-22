@@ -1,45 +1,33 @@
+import Redis from 'ioredis';
 import { config } from '../config.js';
 
-// Mock Redis client for when Redis is disabled
-const mockRedis = {
-  get: async () => null,
-  set: async () => 'OK',
-  del: async () => 0,
-  keys: async () => [],
-  quit: async () => 'OK',
-  on: () => {},
-  connect: async () => {},
-} as any;
+let redis: Redis | null = null;
 
-let redisClient: any = null;
-
-if (config.features.redis) {
-  try {
-    const Redis = require('ioredis');
-    redisClient = new Redis(config.redis.url, {
-      maxRetriesPerRequest: null,
-      enableReadyCheck: false,
+try {
+  if (config.features.redis) {
+    redis = new Redis({
+      host: config.redis.host,
+      port: config.redis.port,
+      password: config.redis.password,
+      maxRetriesPerRequest: 3,
+      retryStrategy(times) {
+        if (times > 3) return null;
+        return Math.min(times * 200, 2000);
+      },
       lazyConnect: true,
-      retryStrategy: () => null,
     });
 
-    redisClient.on('error', (err: any) => {
-      console.warn('⚠️  Redis error:', err.message);
+    redis.on('error', (err) => {
+      console.error('Redis connection error:', err.message);
     });
 
-    // Try to connect
-    redisClient.connect().catch(() => {
-      console.warn('⚠️  Redis connection failed - falling back to mock');
-      redisClient = mockRedis;
+    redis.on('connect', () => {
+      console.log('Redis connected');
     });
-  } catch (err) {
-    console.warn('⚠️  Redis initialization failed - using mock client');
-    redisClient = mockRedis;
   }
-} else {
-  console.log('ℹ️  Redis disabled - using mock client');
-  redisClient = mockRedis;
+} catch (err) {
+  console.warn('Redis not available:', (err as Error).message);
+  redis = null;
 }
 
-export const redis = redisClient;
-
+export { redis };

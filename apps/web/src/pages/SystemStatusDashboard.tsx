@@ -19,7 +19,7 @@ export function SystemStatusDashboard() {
 
   const checkHealth = async () => {
     try {
-      const response = await api.get('/api/diagnostics/health');
+      const response = await api.get('/diagnostics/health');
       setHealth(response.data);
       setLastCheck(new Date());
     } catch (error) {

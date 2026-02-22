@@ -3,16 +3,11 @@ import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@/store/auth';
 import { Button } from './ui/button';
 import { 
-  LayoutDashboard, 
+  Columns3, 
   Users, 
-  Building2, 
-  Target, 
-  CheckSquare, 
-  Mail, 
-  BarChart3,
+  Settings, 
   LogOut,
   Menu,
-  Upload,
   Zap,
   Shield
 } from 'lucide-react';
@@ -29,14 +24,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
   };
 
   const navItems = [
-    { path: '/', icon: LayoutDashboard, label: 'DASHBOARD' },
+    { path: '/', icon: Columns3, label: 'PIPELINE' },
     { path: '/leads', icon: Users, label: 'LEADS' },
-    { path: '/companies', icon: Building2, label: 'COMPANIES' },
-    { path: '/deals', icon: Target, label: 'DEALS' },
-    { path: '/tasks', icon: CheckSquare, label: 'TASKS' },
-    { path: '/sequences', icon: Mail, label: 'SEQUENCES' },
-    { path: '/imports', icon: Upload, label: 'IMPORT DATA' },
-    { path: '/reports', icon: BarChart3, label: 'ANALYTICS' },
+    { path: '/settings', icon: Settings, label: 'SETTINGS' },
   ];
 
   return (
@@ -59,7 +49,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   HEIMDELL
                 </h1>
                 <span className="text-[10px] font-['Share_Tech_Mono'] text-cyan-400/60 tracking-[0.3em]">
-                  CRM SYSTEM v3.0
+                  OUTREACH ENGINE
                 </span>
               </div>
             </div>

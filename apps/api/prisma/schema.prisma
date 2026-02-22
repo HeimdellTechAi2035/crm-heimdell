@@ -1,5 +1,7 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
+﻿// 
+//  Heimdell CRM  Outreach Orchestration Schema
+//  Phase 1: Deterministic pipeline, audit logging, Sheets sync
+// 
 
 generator client {
   provider = "prisma-client-js"
@@ -10,54 +12,45 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ==================== Auth & Organizations ====================
-
-model Organization {
-  id             String   @id @default(cuid())
-  name           String
-  domain         String?  @unique
-  currency       String   @default("GBP")
-  locale         String   @default("en-GB")
-  aiMonthlyLimit Int      @default(10000) @map("ai_monthly_limit")
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
-
-  users                User[]
-  teams                Team[]
-  leads                Lead[]
-  companies            Company[]
-  deals                Deal[]
-  pipelines            Pipeline[]
-  activities           Activity[]
-  tasks                Task[]
-  sequences            Sequence[]
-  emailTemplates       EmailTemplate[]
-  customFields         CustomField[]
-  webhookSubscriptions WebhookSubscription[]
-  auditLogs            AuditLog[]
-  aiArtifacts          AiArtifact[]
-  importJobs           ImportJob[]
-  businessUnits        BusinessUnit[]
-  fieldChanges         FieldChange[]
-  emailIdentities      EmailIdentity[]
-  dealIntels           DealIntel[]
-  winLossReviews       WinLossReview[]
-  stageProbabilities   StageProbability[]
-  permissionPolicies   PermissionPolicy[]
-  knowledgeArticles    KnowledgeArticle[]
-  stagePlaybooks       StagePlaybook[]
-  copilotThreads       CopilotThread[]
-  copilotUsage         CopilotUsage[]
-  retentionSettings    RetentionSettings[]
-  systemCheckRuns      SystemCheckRun[]
-
-  @@map("organizations")
-}
+//  Enums 
 
 enum UserRole {
   ADMIN
-  MANAGER
-  SALES_REP
+  OPERATOR
+  VIEWER
+}
+
+/// Deterministic lead statuses  no free-text. Order matters for Kanban.
+enum LeadStatus {
+  NEW
+  CONTACTED_1
+  WAITING_D2
+  CALL_DUE
+  CALLED
+  WAITING_D1
+  CONTACTED_2
+  WA_VOICE_DUE
+  REPLIED
+  QUALIFIED
+  NOT_INTERESTED
+  COMPLETED
+}
+
+//  Identity 
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  users         User[]
+  leads         Lead[]
+  auditLogs     AuditLog[]
+  sheetsConfigs SheetsSyncConfig[]
+  apiKeys       ApiKey[]
+
+  @@map("organizations")
 }
 
 model User {
@@ -66,1140 +59,203 @@ model User {
   passwordHash   String    @map("password_hash")
   firstName      String    @map("first_name")
   lastName       String    @map("last_name")
-  role           UserRole  @default(SALES_REP)
+  role           UserRole  @default(OPERATOR)
+  organizationId String    @map("organization_id")
   isActive       Boolean   @default(true) @map("is_active")
   lastLoginAt    DateTime? @map("last_login_at")
-  organizationId String    @map("organization_id")
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
 
-  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  teams          TeamMember[]
-  ownedLeads     Lead[]
-  ownedCompanies Company[]
-  ownedDeals     Deal[]
-  activities     Activity[]
-  tasks          Task[]
-  assignedTasks  Task[]          @relation("TaskAssignee")
-  auditLogs      AuditLog[]
-  importJobs     ImportJob[]
-  fieldChanges      FieldChange[]
-  winLossReviews    WinLossReview[]
-  copilotThreads    CopilotThread[]
-  copilotUsage      CopilotUsage[]
-  systemCheckRuns   SystemCheckRun[]
+  organization Organization @relation(fields: [organizationId], references: [id])
+  ownedLeads   Lead[]       @relation("LeadOwner")
 
-  @@index([organizationId])
   @@map("users")
 }
 
-model Team {
-  id             String   @id @default(cuid())
-  name           String
-  organizationId String   @map("organization_id")
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  members      TeamMember[]
-
-  @@index([organizationId])
-  @@map("teams")
-}
-
-model TeamMember {
-  id        String   @id @default(cuid())
-  teamId    String   @map("team_id")
-  userId    String   @map("user_id")
-  createdAt DateTime @default(now()) @map("created_at")
-
-  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([teamId, userId])
-  @@index([teamId])
-  @@index([userId])
-  @@map("team_members")
-}
-
-// ==================== CRM Objects ====================
+//  Leads 
 
 model Lead {
-  id                     String    @id @default(cuid())
-  email                  String
-  firstName              String?   @map("first_name")
-  lastName               String?   @map("last_name")
-  phone                  String?
-  title                  String?
-  companyId              String?   @map("company_id")
-  businessUnitId         String?   @map("business_unit_id")
-  ownerId                String    @map("owner_id")
-  organizationId         String    @map("organization_id")
-  status                 String    @default("new") // new, contacted, qualified, unqualified
-  source                 String?
-  notes                  String?
-  lastContactedAt        DateTime? @map("last_contacted_at")
-  emailOptOut            Boolean   @default(false) @map("email_opt_out")
-  smsOptOut              Boolean   @default(false) @map("sms_opt_out")
-  marketingConsent       Boolean   @default(false) @map("marketing_consent")
-  emailOptOutAt          DateTime? @map("email_opt_out_at")
-  smsOptOutAt            DateTime? @map("sms_opt_out_at")
-  lawfulBasisNote        String?   @map("lawful_basis_note")
-  profileSummary         String?   @map("profile_summary")
-  profileJson            Json?     @map("profile_json")
-  profileLastGeneratedAt DateTime? @map("profile_last_generated_at")
-  createdAt              DateTime  @default(now()) @map("created_at")
-  updatedAt              DateTime  @updatedAt @map("updated_at")
+  id             String @id @default(cuid())
+  organizationId String @map("organization_id")
 
-  organization        Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  businessUnit        BusinessUnit?        @relation(fields: [businessUnitId], references: [id])
-  owner               User                 @relation(fields: [ownerId], references: [id])
-  company             Company?             @relation(fields: [companyId], references: [id])
-  activities          Activity[]
-  tasks               Task[]
-  tags                TagLink[]
-  customFieldValues   CustomFieldValue[]
-  deals               Deal[]
-  sequenceEnrollments SequenceEnrollment[]
-  aiArtifacts         AiArtifact[]
-  importRows          ImportRow[]
+  //  Core info
+  company          String
+  keyDecisionMaker String  @map("key_decision_maker")
+  role             String?
+  website          String?
 
-  @@index([organizationId])
-  @@index([businessUnitId])
-  @@index([ownerId])
-  @@index([companyId])
-  @@index([email])
+  //  Social (cleaned handles)
+  facebookClean String? @map("facebook_clean")
+  instaClean    String? @map("insta_clean")
+  linkedinClean String? @map("linkedin_clean")
+
+  //  Contact
+  emails      String[] @default([])
+  number      String?
+  mobileValid Boolean  @default(false) @map("mobile_valid")
+
+  //  Pipeline state (deterministic)
+  status           LeadStatus @default(NEW)
+  lastActionUtc    DateTime?  @map("last_action_utc")
+  nextAction       String?    @map("next_action")
+  nextActionDueUtc DateTime?  @map("next_action_due_utc")
+  ownerId          String?    @map("owner_id")
+  outcome          String?
+  notes            String?
+  qualified        Boolean    @default(false)
+
+  //  Action flags (each is set once, never unset)
+  dmLiSent1   Boolean   @default(false) @map("dm_li_sent_1")
+  dmFbSent1   Boolean   @default(false) @map("dm_fb_sent_1")
+  dmIgSent1   Boolean   @default(false) @map("dm_ig_sent_1")
+  emailSent1  Boolean   @default(false) @map("email_sent_1")
+  callDone    Boolean   @default(false) @map("call_done")
+  emailSent2  Boolean   @default(false) @map("email_sent_2")
+  dmSent2     Boolean   @default(false) @map("dm_sent_2")
+  waVoiceSent Boolean   @default(false) @map("wa_voice_sent")
+  repliedAtUtc DateTime? @map("replied_at_utc")
+
+  //  Sheets sync tracking
+  sheetsRowIndex Int?      @map("sheets_row_index")
+  sheetsSyncedAt DateTime? @map("sheets_synced_at")
+
+  //  Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  //  Relations
+  organization Organization @relation(fields: [organizationId], references: [id])
+  owner        User?        @relation("LeadOwner", fields: [ownerId], references: [id])
+  auditLogs    AuditLog[]
+
+  @@index([organizationId, status])
+  @@index([organizationId, nextActionDueUtc])
+  @@index([organizationId, ownerId])
   @@map("leads")
 }
 
-model Company {
-  id                     String    @id @default(cuid())
-  name                   String
-  domain                 String?
-  industry               String?
-  size                   String?
-  location               String?
-  phone                  String?
-  website                String?
-  businessUnitId         String?   @map("business_unit_id")
-  profileSummary         String?   @map("profile_summary")
-  profileJson            Json?     @map("profile_json")
-  profileLastGeneratedAt DateTime? @map("profile_last_generated_at")
-  ownerId                String    @map("owner_id")
-  organizationId         String    @map("organization_id")
-  notes                  String?
-  createdAt              DateTime  @default(now()) @map("created_at")
-  updatedAt              DateTime  @updatedAt @map("updated_at")
-
-  organization      Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  businessUnit      BusinessUnit?      @relation(fields: [businessUnitId], references: [id])
-  owner             User               @relation(fields: [ownerId], references: [id])
-  leads             Lead[]
-  deals             Deal[]
-  activities        Activity[]
-  tasks             Task[]
-  tags              TagLink[]
-  customFieldValues CustomFieldValue[]
-  aiArtifacts       AiArtifact[]
-  importRows        ImportRow[]
-
-  @@index([organizationId])
-  @@index([businessUnitId])
-  @@index([ownerId])
-  @@map("companies")
-}
-
-model Pipeline {
-  id             String   @id @default(cuid())
-  name           String
-  organizationId String   @map("organization_id")
-  isDefault      Boolean  @default(false) @map("is_default")
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  stages       Stage[]
-  deals        Deal[]
-
-  @@index([organizationId])
-  @@map("pipelines")
-}
-
-model Stage {
-  id          String   @id @default(cuid())
-  name        String
-  pipelineId  String   @map("pipeline_id")
-  position    Int
-  probability Int      @default(0) // 0-100
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
-
-  pipeline Pipeline @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
-  deals    Deal[]
-
-  @@unique([pipelineId, position])
-  @@index([pipelineId])
-  @@map("stages")
-}
-
-model Deal {
-  id                String    @id @default(cuid())
-  title             String
-  value             Float     @default(0)
-  currency          String    @default("GBP")
-  pipelineId        String    @map("pipeline_id")
-  stageId           String    @map("stage_id")
-  leadId            String?   @map("lead_id")
-  companyId         String?   @map("company_id")
-  businessUnitId    String?   @map("business_unit_id")
-  ownerId           String    @map("owner_id")
-  organizationId    String    @map("organization_id")
-  status            String    @default("open") // open, won, lost
-  lostReason        String?   @map("lost_reason")
-  expectedCloseDate DateTime? @map("expected_close_date")
-  closedAt          DateTime? @map("closed_at")
-  createdAt         DateTime  @default(now()) @map("created_at")
-  updatedAt         DateTime  @updatedAt @map("updated_at")
-
-  organization      Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  businessUnit      BusinessUnit?      @relation(fields: [businessUnitId], references: [id])
-  owner             User               @relation(fields: [ownerId], references: [id])
-  pipeline          Pipeline           @relation(fields: [pipelineId], references: [id])
-  stage             Stage              @relation(fields: [stageId], references: [id])
-  lead              Lead?              @relation(fields: [leadId], references: [id])
-  company           Company?           @relation(fields: [companyId], references: [id])
-  activities        Activity[]
-  tasks             Task[]
-  tags              TagLink[]
-  customFieldValues CustomFieldValue[]
-  aiArtifacts       AiArtifact[]
-  dealIntel         DealIntel?
-  winLossReview     WinLossReview?
-
-  @@index([organizationId])
-  @@index([businessUnitId])
-  @@index([ownerId])
-  @@index([pipelineId])
-  @@index([stageId])
-  @@index([leadId])
-  @@index([companyId])
-  @@map("deals")
-}
-
-// ==================== Activities & Tasks ====================
-
-enum ActivityType {
-  NOTE
-  EMAIL
-  CALL
-  MEETING
-  STATUS_CHANGE
-  CALL_NOTE
-}
-
-model Activity {
-  id             String       @id @default(cuid())
-  type           ActivityType
-  subject        String?
-  body           String?
-  metadata       Json? // For email opens, clicks, etc.
-  leadId         String?      @map("lead_id")
-  companyId      String?      @map("company_id")
-  dealId         String?      @map("deal_id")
-  businessUnitId String?      @map("business_unit_id")
-  userId         String       @map("user_id")
-  organizationId String       @map("organization_id")
-  createdAt      DateTime     @default(now()) @map("created_at")
-
-  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  businessUnit BusinessUnit? @relation(fields: [businessUnitId], references: [id])
-  user         User          @relation(fields: [userId], references: [id])
-  lead         Lead?         @relation(fields: [leadId], references: [id])
-  company      Company?      @relation(fields: [companyId], references: [id])
-  deal         Deal?         @relation(fields: [dealId], references: [id])
-
-  @@index([organizationId])
-  @@index([businessUnitId])
-  @@index([userId])
-  @@index([leadId])
-  @@index([companyId])
-  @@index([dealId])
-  @@map("activities")
-}
-
-enum TaskStatus {
-  TODO
-  IN_PROGRESS
-  DONE
-  CANCELLED
-}
-
-model Task {
-  id             String     @id @default(cuid())
-  title          String
-  description    String?
-  dueDate        DateTime?  @map("due_date")
-  status         TaskStatus @default(TODO)
-  priority       String     @default("medium") // low, medium, high
-  leadId         String?    @map("lead_id")
-  companyId      String?    @map("company_id")
-  dealId         String?    @map("deal_id")
-  businessUnitId String?    @map("business_unit_id")
-  userId         String     @map("user_id") // creator
-  assigneeId     String?    @map("assignee_id")
-  organizationId String     @map("organization_id")
-  completedAt    DateTime?  @map("completed_at")
-  createdAt      DateTime   @default(now()) @map("created_at")
-  updatedAt      DateTime   @updatedAt @map("updated_at")
-
-  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  businessUnit BusinessUnit? @relation(fields: [businessUnitId], references: [id])
-  user         User          @relation(fields: [userId], references: [id])
-  assignee     User?         @relation("TaskAssignee", fields: [assigneeId], references: [id])
-  lead         Lead?         @relation(fields: [leadId], references: [id])
-  company      Company?      @relation(fields: [companyId], references: [id])
-  deal         Deal?         @relation(fields: [dealId], references: [id])
-
-  @@index([organizationId])
-  @@index([businessUnitId])
-  @@index([userId])
-  @@index([assigneeId])
-  @@index([leadId])
-  @@index([companyId])
-  @@index([dealId])
-  @@index([status])
-  @@index([dueDate])
-  @@map("tasks")
-}
-
-// ==================== Tags & Custom Fields ====================
-
-model Tag {
-  id             String   @id @default(cuid())
-  name           String
-  color          String?
-  organizationId String   @map("organization_id")
-  createdAt      DateTime @default(now()) @map("created_at")
-
-  links TagLink[]
-
-  @@unique([organizationId, name])
-  @@index([organizationId])
-  @@map("tags")
-}
-
-enum TaggableType {
-  LEAD
-  COMPANY
-  DEAL
-}
-
-model TagLink {
-  id           String       @id @default(cuid())
-  tagId        String       @map("tag_id")
-  taggableType TaggableType @map("taggable_type")
-  taggableId   String       @map("taggable_id")
-  createdAt    DateTime     @default(now()) @map("created_at")
-
-  tag     Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
-  lead    Lead?    @relation(fields: [taggableId], references: [id], map: "tag_links_lead_fkey")
-  company Company? @relation(fields: [taggableId], references: [id], map: "tag_links_company_fkey")
-  deal    Deal?    @relation(fields: [taggableId], references: [id], map: "tag_links_deal_fkey")
-
-  @@unique([tagId, taggableType, taggableId])
-  @@index([taggableType, taggableId])
-  @@map("tag_links")
-}
-
-enum FieldType {
-  TEXT
-  NUMBER
-  DATE
-  BOOLEAN
-  SELECT
-}
-
-model CustomField {
-  id             String    @id @default(cuid())
-  name           String
-  fieldType      FieldType @map("field_type")
-  entityType     String    @map("entity_type") // lead, company, deal
-  options        Json? // For SELECT type
-  organizationId String    @map("organization_id")
-  createdAt      DateTime  @default(now()) @map("created_at")
-
-  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  values       CustomFieldValue[]
-
-  @@unique([organizationId, name, entityType])
-  @@index([organizationId])
-  @@map("custom_fields")
-}
-
-model CustomFieldValue {
-  id            String @id @default(cuid())
-  customFieldId String @map("custom_field_id")
-  entityType    String @map("entity_type")
-  entityId      String @map("entity_id")
-  value         String
-
-  customField CustomField @relation(fields: [customFieldId], references: [id], onDelete: Cascade)
-  lead        Lead?       @relation(fields: [entityId], references: [id], map: "custom_field_values_lead_fkey")
-  company     Company?    @relation(fields: [entityId], references: [id], map: "custom_field_values_company_fkey")
-  deal        Deal?       @relation(fields: [entityId], references: [id], map: "custom_field_values_deal_fkey")
-
-  @@unique([customFieldId, entityId])
-  @@index([entityType, entityId])
-  @@map("custom_field_values")
-}
-
-// ==================== Email & Sequences ====================
-
-model EmailTemplate {
-  id             String   @id @default(cuid())
-  name           String
-  subject        String
-  body           String
-  businessUnitId String?  @map("business_unit_id")
-  organizationId String   @map("organization_id")
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
-
-  organization  Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  businessUnit  BusinessUnit?  @relation(fields: [businessUnitId], references: [id])
-  sequenceSteps SequenceStep[]
-
-  @@index([organizationId])
-  @@index([businessUnitId])
-  @@map("email_templates")
-}
-
-model Sequence {
-  id             String   @id @default(cuid())
-  name           String
-  goal           String?
-  businessUnitId String?  @map("business_unit_id")
-  isActive       Boolean  @default(true) @map("is_active")
-  organizationId String   @map("organization_id")
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
-
-  organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  businessUnit BusinessUnit?        @relation(fields: [businessUnitId], references: [id])
-  steps        SequenceStep[]
-  enrollments  SequenceEnrollment[]
-
-  @@index([organizationId])
-  @@index([businessUnitId])
-  @@map("sequences")
-}
-
-enum SequenceStepType {
-  EMAIL
-  TASK
-  WAIT
-}
-
-model SequenceStep {
-  id              String           @id @default(cuid())
-  sequenceId      String           @map("sequence_id")
-  position        Int
-  type            SequenceStepType
-  delayDays       Int              @default(0) @map("delay_days")
-  emailTemplateId String?          @map("email_template_id")
-  taskDescription String?          @map("task_description")
-  createdAt       DateTime         @default(now()) @map("created_at")
-
-  sequence      Sequence       @relation(fields: [sequenceId], references: [id], onDelete: Cascade)
-  emailTemplate EmailTemplate? @relation(fields: [emailTemplateId], references: [id])
-
-  @@unique([sequenceId, position])
-  @@index([sequenceId])
-  @@map("sequence_steps")
-}
-
-enum EnrollmentStatus {
-  ACTIVE
-  PAUSED
-  COMPLETED
-  STOPPED
-}
-
-model SequenceEnrollment {
-  id           String           @id @default(cuid())
-  sequenceId   String           @map("sequence_id")
-  leadId       String           @map("lead_id")
-  status       EnrollmentStatus @default(ACTIVE)
-  currentStep  Int              @default(0) @map("current_step")
-  nextActionAt DateTime?        @map("next_action_at")
-  startedAt    DateTime         @default(now()) @map("started_at")
-  completedAt  DateTime?        @map("completed_at")
-
-  sequence Sequence @relation(fields: [sequenceId], references: [id], onDelete: Cascade)
-  lead     Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
-
-  @@unique([sequenceId, leadId])
-  @@index([sequenceId])
-  @@index([leadId])
-  @@index([status, nextActionAt])
-  @@map("sequence_enrollments")
-}
-
-// ==================== AI ====================
-
-model AiArtifact {
-  id             String   @id @default(cuid())
-  type           String // enrichment, next_action, sequence, call_summary
-  prompt         String   @db.Text
-  response       Json
-  modelName      String   @map("model_name")
-  promptVersion  String?  @map("prompt_version")
-  leadId         String?  @map("lead_id")
-  companyId      String?  @map("company_id")
-  dealId         String?  @map("deal_id")
-  organizationId String   @map("organization_id")
-  createdAt      DateTime @default(now()) @map("created_at")
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  lead         Lead?        @relation(fields: [leadId], references: [id])
-  company      Company?     @relation(fields: [companyId], references: [id])
-  deal         Deal?        @relation(fields: [dealId], references: [id])
-
-  @@index([organizationId])
-  @@index([leadId])
-  @@index([companyId])
-  @@index([dealId])
-  @@index([type])
-  @@map("ai_artifacts")
-}
-
-// ==================== Webhooks & Audit ====================
-
-model WebhookSubscription {
-  id             String   @id @default(cuid())
-  url            String
-  events         String[] // deal.created, lead.updated, etc.
-  secret         String
-  isActive       Boolean  @default(true) @map("is_active")
-  organizationId String   @map("organization_id")
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-
-  @@index([organizationId])
-  @@map("webhook_subscriptions")
-}
+//  Audit (immutable append-only) 
 
 model AuditLog {
   id             String   @id @default(cuid())
-  action         String // created, updated, deleted
-  entityType     String   @map("entity_type") // lead, deal, etc.
-  entityId       String   @map("entity_id")
-  changes        Json? // before/after
-  userId         String   @map("user_id")
+  leadId         String   @map("lead_id")
   organizationId String   @map("organization_id")
-  createdAt      DateTime @default(now()) @map("created_at")
+  actor          String   // "user:<id>" | "system" | "agent:<key_name>"
+  action         String   // "status_change" | "field_update" | "action_logged" | "sheets_sync_in"
+  before         Json?    // snapshot of changed fields BEFORE
+  after          Json?    // snapshot of changed fields AFTER
+  timestampUtc   DateTime @default(now()) @map("timestamp_utc")
+  source         String   // "api" | "agent" | "sync" | "scheduler"
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  user         User         @relation(fields: [userId], references: [id])
+  lead         Lead         @relation(fields: [leadId], references: [id])
+  organization Organization @relation(fields: [organizationId], references: [id])
 
-  @@index([organizationId])
-  @@index([userId])
-  @@index([entityType, entityId])
+  @@index([leadId])
+  @@index([organizationId, timestampUtc])
   @@map("audit_logs")
 }
 
-// ==================== CSV Import ====================
+//  Google Sheets Integration 
 
-enum ImportStatus {
-  uploaded
-  mapping_required
-  importing
-  completed
-  failed
+model SheetsSyncConfig {
+  id                 String    @id @default(cuid())
+  organizationId     String    @map("organization_id")
+  sheetId            String    @map("sheet_id")
+  tabName            String    @default("Sheet1") @map("tab_name")
+  columnMapping      Json      @map("column_mapping")
+  serviceAccountJson Json?     @map("service_account_json")
+  lastSyncAt         DateTime? @map("last_sync_at")
+  isActive           Boolean   @default(true) @map("is_active")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  organization Organization    @relation(fields: [organizationId], references: [id])
+  syncLogs     SheetsSyncLog[]
+
+  @@map("sheets_sync_configs")
 }
 
-enum ImportRowStatus {
-  pending
-  imported
-  failed
-  skipped
+model SheetsSyncLog {
+  id            String    @id @default(cuid())
+  configId      String    @map("config_id")
+  direction     String
+  status        String
+  rowsProcessed Int       @default(0) @map("rows_processed")
+  rowsCreated   Int       @default(0) @map("rows_created")
+  rowsUpdated   Int       @default(0) @map("rows_updated")
+  rowsSkipped   Int       @default(0) @map("rows_skipped")
+  errors        Json?     @default("[]")
+  dryRun        Boolean   @default(false) @map("dry_run")
+  startedAt     DateTime  @default(now()) @map("started_at")
+  completedAt   DateTime? @map("completed_at")
+
+  config SheetsSyncConfig @relation(fields: [configId], references: [id])
+
+  @@map("sheets_sync_logs")
 }
 
-model ImportJob {
-  id               String       @id @default(cuid())
-  organizationId   String       @map("organization_id")
-  businessUnitId   String?      @map("business_unit_id")
-  createdByUserId  String       @map("created_by_user_id")
-  status           ImportStatus @default(uploaded)
-  originalFilename String       @map("original_filename")
-  rowCount         Int          @default(0) @map("row_count")
-  mappingJson      Json?        @map("mapping_json")
-  errorLog         String?      @map("error_log")
-  importedCount    Int          @default(0) @map("imported_count")
-  failedCount      Int          @default(0) @map("failed_count")
-  skippedCount     Int          @default(0) @map("skipped_count")
-  createdAt        DateTime     @default(now()) @map("created_at")
-  updatedAt        DateTime     @updatedAt @map("updated_at")
-  completedAt      DateTime?    @map("completed_at")
+//  API Keys (OpenClaw agent auth) 
 
-  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  businessUnit BusinessUnit? @relation(fields: [businessUnitId], references: [id])
-  createdBy    User          @relation(fields: [createdByUserId], references: [id])
-  rows         ImportRow[]
-
-  @@index([organizationId])
-  @@index([businessUnitId])
-  @@index([createdByUserId])
-  @@index([status])
-  @@map("import_jobs")
-}
-
-model ImportRow {
-  id               String          @id @default(cuid())
-  importJobId      String          @map("import_job_id")
-  rowNumber        Int             @map("row_number")
-  rawJson          Json            @map("raw_json")
-  status           ImportRowStatus @default(pending)
-  error            String?
-  createdLeadId    String?         @map("created_lead_id")
-  createdCompanyId String?         @map("created_company_id")
-  createdAt        DateTime        @default(now()) @map("created_at")
-  updatedAt        DateTime        @updatedAt @map("updated_at")
-
-  importJob ImportJob @relation(fields: [importJobId], references: [id], onDelete: Cascade)
-  lead      Lead?     @relation(fields: [createdLeadId], references: [id])
-  company   Company?  @relation(fields: [createdCompanyId], references: [id])
-
-  @@index([importJobId])
-  @@index([status])
-  @@map("import_rows")
-}
-
-// ==================== Multi-Brand / Business Units ====================
-
-model BusinessUnit {
-  id                     String   @id @default(cuid())
-  organizationId         String   @map("organization_id")
-  name                   String
-  slug                   String
-  defaultPipelineId      String?  @map("default_pipeline_id")
-  defaultEmailIdentityId String?  @map("default_email_identity_id")
-  defaultTwilioNumberId  String?  @map("default_twilio_number_id")
-  timezone               String   @default("Europe/London")
-  country                String   @default("GB")
-  isActive               Boolean  @default(true) @map("is_active")
-  createdAt              DateTime @default(now()) @map("created_at")
-  updatedAt              DateTime @updatedAt @map("updated_at")
-
-  organization      Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  leads             Lead[]
-  companies         Company[]
-  deals             Deal[]
-  activities        Activity[]
-  tasks             Task[]
-  sequences         Sequence[]
-  emailTemplates    EmailTemplate[]
-  importJobs        ImportJob[]
-  emailIdentities   EmailIdentity[]
-  knowledgeArticles KnowledgeArticle[]
-  stagePlaybooks    StagePlaybook[]
-
-  @@unique([organizationId, slug])
-  @@index([organizationId])
-  @@index([isActive])
-  @@map("business_units")
-}
-
-// ==================== Field-Level History ====================
-
-model FieldChange {
-  id              String   @id @default(cuid())
-  organizationId  String   @map("organization_id")
-  entityType      String   @map("entity_type") // lead, deal, company
-  entityId        String   @map("entity_id")
-  fieldName       String   @map("field_name")
-  oldValue        Json?    @map("old_value")
-  newValue        Json?    @map("new_value")
-  changedByUserId String   @map("changed_by_user_id")
-  reasonCode      String?  @map("reason_code")
-  note            String?
-  createdAt       DateTime @default(now()) @map("created_at")
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  changedBy    User         @relation(fields: [changedByUserId], references: [id])
-
-  @@index([organizationId])
-  @@index([entityType, entityId])
-  @@index([changedByUserId])
-  @@index([createdAt])
-  @@map("field_changes")
-}
-
-// ==================== Email & SMS Deliverability ====================
-
-enum WarmupState {
-  new
-  warming
-  stable
-  restricted
-}
-
-model EmailIdentity {
-  id              String      @id @default(cuid())
-  organizationId  String      @map("organization_id")
-  businessUnitId  String?     @map("business_unit_id")
-  fromName        String      @map("from_name")
-  fromEmail       String      @map("from_email")
-  smtpHost        String      @map("smtp_host")
-  smtpPort        Int         @map("smtp_port")
-  smtpUser        String      @map("smtp_user")
-  smtpPass        String      @map("smtp_pass") // Encrypted
-  dailySendLimit  Int         @default(100) @map("daily_send_limit")
-  perMinuteLimit  Int         @default(10) @map("per_minute_limit")
-  quietHoursStart String?     @map("quiet_hours_start") // HH:MM format
-  quietHoursEnd   String?     @map("quiet_hours_end")
-  timezone        String      @default("Europe/London")
-  warmupState     WarmupState @default(new) @map("warmup_state")
-  isActive        Boolean     @default(true) @map("is_active")
-  createdAt       DateTime    @default(now()) @map("created_at")
-  updatedAt       DateTime    @updatedAt @map("updated_at")
-
-  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  businessUnit BusinessUnit? @relation(fields: [businessUnitId], references: [id])
-
-  @@unique([organizationId, fromEmail])
-  @@index([organizationId])
-  @@index([businessUnitId])
-  @@index([isActive])
-  @@map("email_identities")
-}
-
-// ==================== Decision Memory ====================
-
-model DealIntel {
-  id                 String   @id @default(cuid())
-  organizationId     String   @map("organization_id")
-  dealId             String   @unique @map("deal_id")
-  decisionMaker      String?  @map("decision_maker")
-  keyPainPoints      Json?    @map("key_pain_points")
-  objections         Json?
-  whatWorked         String?  @map("what_worked") @db.Text
-  whatFailed         String?  @map("what_failed") @db.Text
-  competitors        Json?
-  pricingNotes       String?  @map("pricing_notes") @db.Text
-  nextStepCommitment String?  @map("next_step_commitment")
-  createdAt          DateTime @default(now()) @map("created_at")
-  updatedAt          DateTime @updatedAt @map("updated_at")
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  deal         Deal         @relation(fields: [dealId], references: [id], onDelete: Cascade)
-
-  @@index([organizationId])
-  @@index([dealId])
-  @@map("deal_intel")
-}
-
-enum WinLossOutcome {
-  won
-  lost
-}
-
-model WinLossReview {
-  id                String         @id @default(cuid())
-  organizationId    String         @map("organization_id")
-  dealId            String         @unique @map("deal_id")
-  outcome           WinLossOutcome
-  primaryReasonCode String         @map("primary_reason_code")
-  notes             String?        @db.Text
-  learned           String?        @db.Text
-  createdByUserId   String         @map("created_by_user_id")
-  createdAt         DateTime       @default(now()) @map("created_at")
-  updatedAt         DateTime       @updatedAt @map("updated_at")
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  deal         Deal         @relation(fields: [dealId], references: [id], onDelete: Cascade)
-  createdBy    User         @relation(fields: [createdByUserId], references: [id])
-
-  @@index([organizationId])
-  @@index([dealId])
-  @@index([outcome])
-  @@index([primaryReasonCode])
-  @@map("win_loss_reviews")
-}
-
-// ==================== Forecasting ====================
-
-model StageProbability {
-  id                  String    @id @default(cuid())
-  organizationId      String    @map("organization_id")
-  pipelineId          String    @map("pipeline_id")
-  stageId             String    @map("stage_id")
-  probability         Float // 0-1
-  historicalCloseRate Float?    @map("historical_close_rate")
-  lastComputedAt      DateTime? @map("last_computed_at")
-  createdAt           DateTime  @default(now()) @map("created_at")
-  updatedAt           DateTime  @updatedAt @map("updated_at")
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-
-  @@unique([organizationId, pipelineId, stageId])
-  @@index([organizationId])
-  @@index([pipelineId])
-  @@map("stage_probabilities")
-}
-
-// ==================== RBAC & Permissions ====================
-
-enum PolicyAction {
-  view_field
-  edit_field
-  export_data
-  change_stage
-  approve_discount
-  mark_won_lost
-}
-
-model PermissionPolicy {
-  id             String       @id @default(cuid())
-  organizationId String       @map("organization_id")
-  name           String
-  description    String?
-  role           UserRole
-  action         PolicyAction
-  resource       String // field name, entity type
-  condition      Json? // threshold, stage restrictions
-  isActive       Boolean      @default(true) @map("is_active")
-  createdAt      DateTime     @default(now()) @map("created_at")
-  updatedAt      DateTime     @updatedAt @map("updated_at")
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-
-  @@index([organizationId])
-  @@index([role])
-  @@index([action])
-  @@index([isActive])
-  @@map("permission_policies")
-}
-
-// ==================== Knowledge Base ====================
-
-enum ArticleVisibility {
-  public
-  internal
-}
-
-model KnowledgeArticle {
-  id             String            @id @default(cuid())
-  organizationId String            @map("organization_id")
-  businessUnitId String?           @map("business_unit_id")
-  title          String
-  body           String            @db.Text
-  tags           String[]
-  visibility     ArticleVisibility @default(internal)
-  isPublished    Boolean           @default(false) @map("is_published")
-  createdAt      DateTime          @default(now()) @map("created_at")
-  updatedAt      DateTime          @updatedAt @map("updated_at")
-
-  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  businessUnit BusinessUnit? @relation(fields: [businessUnitId], references: [id])
-
-  @@index([organizationId])
-  @@index([businessUnitId])
-  @@index([isPublished])
-  @@map("knowledge_articles")
-}
-
-model StagePlaybook {
-  id                  String   @id @default(cuid())
-  organizationId      String   @map("organization_id")
-  businessUnitId      String?  @map("business_unit_id")
-  pipelineId          String   @map("pipeline_id")
-  stageId             String   @map("stage_id")
-  checklistItems      Json     @map("checklist_items")
-  qualifyingQuestions Json?    @map("qualifying_questions")
-  objectionsResponses Json?    @map("objections_responses")
-  approvedTemplates   Json?    @map("approved_templates")
-  createdAt           DateTime @default(now()) @map("created_at")
-  updatedAt           DateTime @updatedAt @map("updated_at")
-
-  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  businessUnit BusinessUnit? @relation(fields: [businessUnitId], references: [id])
-
-  @@unique([organizationId, pipelineId, stageId])
-  @@index([organizationId])
-  @@index([businessUnitId])
-  @@index([pipelineId])
-  @@map("stage_playbooks")
-}
-
-// ==================== Copilot (Enterprise) ====================
-
-enum CopilotContextType {
-  global
-  lead
-  deal
-  company
-  import_job
-  pipeline
-}
-
-enum CopilotMessageRole {
-  system
-  user
-  assistant
-  tool
-}
-
-model CopilotThread {
-  id          String             @id @default(cuid())
-  orgId       String             @map("org_id")
-  userId      String             @map("user_id")
-  title       String             @default("New conversation")
-  contextType CopilotContextType @map("context_type")
-  contextId   String?            @map("context_id")
-  isActive    Boolean            @default(true) @map("is_active")
-  createdAt   DateTime           @default(now()) @map("created_at")
-  updatedAt   DateTime           @updatedAt @map("updated_at")
-
-  organization Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  messages     CopilotMessage[]
-
-  @@index([orgId])
-  @@index([userId])
-  @@index([isActive])
-  @@map("copilot_threads")
-}
-
-model CopilotMessage {
-  id        String             @id @default(cuid())
-  threadId  String             @map("thread_id")
-  role      CopilotMessageRole
-  content   String             @db.Text
-  metadata  Json?
-  createdAt DateTime           @default(now()) @map("created_at")
-
-  thread CopilotThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
-
-  @@index([threadId])
-  @@map("copilot_messages")
-}
-
-model CopilotUsage {
-  id           String @id @default(cuid())
-  orgId        String @map("org_id")
-  userId       String @map("user_id")
-  month        String // "2025-01"
-  requestCount Int    @default(0) @map("request_count")
-  tokenCount   Int    @default(0) @map("token_count")
-  costCents    Int    @default(0) @map("cost_cents")
-
-  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  user         User         @relation(fields: [userId], references: [id])
-
-  @@unique([orgId, userId, month])
-  @@index([orgId])
-  @@index([userId])
-  @@map("copilot_usage")
-}
-
-// ==================== Observability & Queue Management ====================
-
-enum QueueJobStatus {
-  waiting
-  active
-  completed
-  failed
-  delayed
-}
-
-model QueueJob {
-  id           String         @id @default(cuid())
-  queueName    String         @map("queue_name")
-  jobId        String         @map("job_id")
-  data         Json
-  status       QueueJobStatus
-  attempts     Int            @default(0)
-  failedReason String?        @map("failed_reason") @db.Text
-  completedAt  DateTime?      @map("completed_at")
-  createdAt    DateTime       @default(now()) @map("created_at")
-  updatedAt    DateTime       @updatedAt @map("updated_at")
-
-  @@unique([queueName, jobId])
-  @@index([queueName])
-  @@index([status])
-  @@index([createdAt])
-  @@map("queue_jobs")
-}
-
-model WebhookEvent {
-  id              String    @id @default(cuid())
-  provider        String // twilio, sendgrid, etc.
-  providerEventId String?   @map("provider_event_id")
-  payloadHash     String    @map("payload_hash")
-  payload         Json
-  signatureValid  Boolean   @map("signature_valid")
-  processed       Boolean   @default(false)
-  processedAt     DateTime? @map("processed_at")
-  errorMessage    String?   @map("error_message")
-  createdAt       DateTime  @default(now()) @map("created_at")
-
-  @@unique([provider, providerEventId])
-  @@index([provider])
-  @@index([processed])
-  @@index([createdAt])
-  @@map("webhook_events")
-}
-
-model SystemAlert {
+model ApiKey {
   id             String    @id @default(cuid())
-  alertType      String    @map("alert_type") // queue_failure, email_failure, webhook_error
-  severity       String // info, warning, error, critical
-  message        String    @db.Text
-  metadata       Json?
-  acknowledged   Boolean   @default(false)
-  acknowledgedAt DateTime? @map("acknowledged_at")
+  organizationId String    @map("organization_id")
+  name           String
+  keyHash        String    @unique @map("key_hash")
+  prefix         String
+  permissions    String[]  @default(["read", "update", "transition", "note"])
+  isActive       Boolean   @default(true) @map("is_active")
+  lastUsedAt     DateTime? @map("last_used_at")
   createdAt      DateTime  @default(now()) @map("created_at")
 
-  @@index([alertType])
-  @@index([severity])
-  @@index([acknowledged])
-  @@index([createdAt])
-  @@map("system_alerts")
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@map("api_keys")
 }
 
-// ==================== GDPR & Data Protection ====================
+//  Email Sending (Phase 3: direct SMTP) 
 
-enum DataExportStatus {
-  requested
-  processing
-  completed
-  failed
+enum EmailSendStatus {
+  SENT
+  FAILED
 }
 
-model DataExportRequest {
-  id                String           @id @default(cuid())
-  organizationId    String           @map("organization_id")
-  leadId            String           @map("lead_id")
-  requestedByUserId String           @map("requested_by_user_id")
-  status            DataExportStatus @default(requested)
-  exportUrl         String?          @map("export_url")
-  expiresAt         DateTime?        @map("expires_at")
-  createdAt         DateTime         @default(now()) @map("created_at")
-  completedAt       DateTime?        @map("completed_at")
+model SenderAccount {
+  id               String    @id @default(cuid())
+  email            String    @unique
+  displayName      String?   @map("display_name")
+  smtpHost         String    @map("smtp_host")
+  smtpPort         Int       @map("smtp_port")
+  smtpSecure       Boolean   @default(true) @map("smtp_secure")
+  smtpUser         String    @map("smtp_user")
+  smtpPassEncrypted String   @map("smtp_pass_encrypted")
+  isActive         Boolean   @default(true) @map("is_active")
+  dailyLimit       Int       @default(100) @map("daily_limit")
+  sentToday        Int       @default(0) @map("sent_today")
+  lastResetAt      DateTime  @default(now()) @map("last_reset_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
 
-  @@index([organizationId])
+  emailSendLogs EmailSendLog[]
+
+  @@map("sender_accounts")
+}
+
+model EmailSendLog {
+  id                String          @id @default(cuid())
+  leadId            String?         @map("lead_id")
+  senderEmail       String          @map("sender_email")
+  toEmail           String          @map("to_email")
+  subject           String
+  bodyPreview       String          @map("body_preview")
+  status            EmailSendStatus
+  providerMessageId String?         @map("provider_message_id")
+  error             String?
+  actor             String          // "user:<id>" | "agent:<key_name>" | "system"
+  createdAt         DateTime        @default(now()) @map("created_at")
+
+  senderAccount SenderAccount @relation(fields: [senderEmail], references: [email])
+
   @@index([leadId])
-  @@index([status])
-  @@map("data_export_requests")
-}
-
-model RetentionSettings {
-  id                                String   @id @default(cuid())
-  organizationId                    String   @unique @map("organization_id")
-  autoDeleteImportsAfterDays        Int?     @map("auto_delete_imports_after_days")
-  anonymizeInactiveLeadsAfterMonths Int?     @map("anonymize_inactive_leads_after_months")
-  isEnabled                         Boolean  @default(false) @map("is_enabled")
-  createdAt                         DateTime @default(now()) @map("created_at")
-  updatedAt                         DateTime @updatedAt @map("updated_at")
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-
-  @@map("retention_settings")
-}
-
-// ==================== System Diagnostics ====================
-
-enum CheckMode {
-  quick
-  full
-  preflight
-
-  @@map("check_mode")
-}
-
-enum CheckStatus {
-  running
-  completed
-  failed
-
-  @@map("check_status")
-}
-
-enum CheckCategory {
-  database
-  migrations
-  api
-  auth
-  rbac
-  web
-  websocket
-  queue
-  redis
-  storage
-  oauth
-  email
-  sms
-  twilio
-  webhooks
-  ai
-  search
-  reporting
-  backups
-
-  @@map("check_category")
-}
-
-enum CheckResultStatus {
-  pass
-  warn
-  fail
-
-  @@map("check_result_status")
-}
-
-model SystemCheckRun {
-  id              String      @id @default(cuid())
-  organizationId  String?     @map("organization_id")
-  startedByUserId String      @map("started_by_user_id")
-  mode            CheckMode
-  status          CheckStatus @default(running)
-  startedAt       DateTime    @default(now()) @map("started_at")
-  finishedAt      DateTime?   @map("finished_at")
-  summaryJson     Json?       @map("summary_json")
-  createdAt       DateTime    @default(now()) @map("created_at")
-  updatedAt       DateTime    @updatedAt @map("updated_at")
-
-  organization Organization?        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  startedBy    User                 @relation(fields: [startedByUserId], references: [id])
-  results      SystemCheckResult[]
-
-  @@index([organizationId])
-  @@index([startedByUserId])
-  @@index([status])
-  @@index([startedAt])
-  @@map("system_check_runs")
-}
-
-model SystemCheckResult {
-  id                String            @id @default(cuid())
-  systemCheckRunId  String            @map("system_check_run_id")
-  category          CheckCategory
-  checkName         String            @map("check_name")
-  status            CheckResultStatus
-  durationMs        Int               @map("duration_ms")
-  detailsJson       Json?             @map("details_json")
-  recommendation    String?           @db.Text
-  evidence          String?           @db.Text
-  createdAt         DateTime          @default(now()) @map("created_at")
-  updatedAt         DateTime          @updatedAt @map("updated_at")
-
-  systemCheckRun SystemCheckRun @relation(fields: [systemCheckRunId], references: [id], onDelete: Cascade)
-
-  @@index([systemCheckRunId])
-  @@index([category])
-  @@index([status])
-  @@map("system_check_results")
+  @@index([senderEmail, createdAt])
+  @@map("email_send_logs")
 }

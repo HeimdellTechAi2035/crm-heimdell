@@ -1,15 +1,11 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/store/auth';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Shield, LogIn, AlertTriangle } from 'lucide-react';
 
 export function Login() {
-  const navigate = useNavigate();
-  const setUser = useAuthStore((state) => state.setUser);
+  const setUser = useAuthStore((s) => s.setUser);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -18,79 +14,121 @@ export function Login() {
     mutationFn: () => api.login(email, password),
     onSuccess: (data) => {
       setUser(data.user);
-      navigate('/');
     },
-    onError: (error: any) => {
-      setError(error.message || 'Login failed');
+    onError: (err: any) => {
+      setError(err.message || 'Authentication failed');
     },
   });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    if (!email.trim() || !password.trim()) {
+      setError('Credentials required');
+      return;
+    }
     loginMutation.mutate();
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-background">
-      <Card className="w-full max-w-md">
-        <CardHeader className="space-y-1">
-          <CardTitle className="text-2xl font-bold text-center">
-            Heimdell CRM
-          </CardTitle>
-          <p className="text-center text-muted-foreground">
-            Sign in to your account
-          </p>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {error && (
-              <div className="p-3 text-sm text-destructive bg-destructive/10 rounded-md">
-                {error}
-              </div>
-            )}
+    <div className="relative flex items-center justify-center min-h-screen bg-black overflow-hidden scan-lines">
+      {/* Background effects */}
+      <div className="grid-bg" />
+      <div className="hex-pattern absolute inset-0 opacity-30" />
 
-            <div className="space-y-2">
-              <label htmlFor="email" className="text-sm font-medium">
-                Email
+      {/* Glowing border card */}
+      <div className="relative z-10 w-full max-w-md mx-4">
+        {/* Top line accent */}
+        <div className="h-px bg-gradient-to-r from-transparent via-cyan-400 to-transparent mb-6" />
+
+        <div className="holo-card rounded-lg p-8 backdrop-blur-xl">
+          {/* Logo */}
+          <div className="flex flex-col items-center mb-8">
+            <div className="relative mb-4">
+              <Shield className="h-14 w-14 text-cyan-400 glow-icon" />
+              <div className="absolute inset-0 h-14 w-14 bg-cyan-400/20 blur-xl animate-pulse" />
+            </div>
+            <h1 className="text-2xl font-['Orbitron'] font-bold tracking-wider text-cyan-400 neon-text">
+              HEIMDELL
+            </h1>
+            <span className="text-[10px] font-['Share_Tech_Mono'] text-cyan-400/50 tracking-[0.4em] mt-1">
+              OUTREACH ENGINE
+            </span>
+          </div>
+
+          {/* Divider */}
+          <div className="energy-bar mb-6" />
+
+          {/* Error */}
+          {error && (
+            <div className="flex items-center gap-2 p-3 mb-4 rounded border border-red-400/30 bg-red-400/5">
+              <AlertTriangle className="h-4 w-4 text-red-400 shrink-0" />
+              <span className="text-xs font-['Share_Tech_Mono'] text-red-400">{error}</span>
+            </div>
+          )}
+
+          {/* Form */}
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <div>
+              <label className="block text-[10px] font-['Share_Tech_Mono'] text-cyan-400/50 tracking-wider mb-1.5">
+                OPERATOR ID
               </label>
-              <Input
-                id="email"
+              <input
                 type="text"
-                placeholder="you@example.com"
+                autoComplete="username"
+                placeholder="admin"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                required
+                className="cyber-input w-full px-4 py-3 rounded font-['Rajdhani'] text-sm"
+                autoFocus
               />
             </div>
 
-            <div className="space-y-2">
-              <label htmlFor="password" className="text-sm font-medium">
-                Password
+            <div>
+              <label className="block text-[10px] font-['Share_Tech_Mono'] text-cyan-400/50 tracking-wider mb-1.5">
+                ACCESS KEY
               </label>
-              <Input
-                id="password"
+              <input
                 type="password"
+                autoComplete="current-password"
+                placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                required
+                className="cyber-input w-full px-4 py-3 rounded font-['Rajdhani'] text-sm"
               />
             </div>
 
-            <Button
+            <button
               type="submit"
-              className="w-full"
               disabled={loginMutation.isPending}
+              className="cyber-btn w-full py-3 flex items-center justify-center gap-2 text-sm font-['Orbitron'] tracking-wider"
             >
-              {loginMutation.isPending ? 'Signing in...' : 'Sign In'}
-            </Button>
-
-            <div className="text-sm text-center text-muted-foreground">
-              <p>Demo: admin / admin123</p>
-            </div>
+              {loginMutation.isPending ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
+                  AUTHENTICATING...
+                </>
+              ) : (
+                <>
+                  <LogIn className="h-4 w-4" />
+                  AUTHENTICATE
+                </>
+              )}
+            </button>
           </form>
-        </CardContent>
-      </Card>
+
+          {/* Footer */}
+          <div className="mt-6 pt-4 border-t border-cyan-500/10">
+            <div className="flex items-center justify-between text-[9px] font-['Share_Tech_Mono'] text-cyan-400/30">
+              <span>SECURE TERMINAL</span>
+              <span>AES-256-GCM</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Bottom line accent */}
+        <div className="h-px bg-gradient-to-r from-transparent via-cyan-400/40 to-transparent mt-6" />
+      </div>
     </div>
   );
 }

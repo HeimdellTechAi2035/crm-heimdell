@@ -37,7 +37,7 @@ export function BrandProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      const response = await api.get('/api/business-units/active');
+      const response = await api.get('/business-units/active');
       const brandsData = response.data;
       setBrands(brandsData);
 

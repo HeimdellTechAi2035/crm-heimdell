@@ -69,23 +69,7 @@ export async function authRoutes(fastify: FastifyInstance) {
         },
       });
 
-      // Create default pipeline
-      await prisma.pipeline.create({
-        data: {
-          name: 'Sales Pipeline',
-          organizationId: org.id,
-          isDefault: true,
-          stages: {
-            create: [
-              { name: 'Lead', position: 0, probability: 10 },
-              { name: 'Qualified', position: 1, probability: 25 },
-              { name: 'Proposal', position: 2, probability: 50 },
-              { name: 'Negotiation', position: 3, probability: 75 },
-              { name: 'Closed Won', position: 4, probability: 100 },
-            ],
-          },
-        },
-      });
+      // Organization is ready — no pipeline models in outreach CRM
 
       const token = fastify.jwt.sign({
         id: user.id,
@@ -142,10 +126,10 @@ export async function authRoutes(fastify: FastifyInstance) {
       const data = loginSchema.parse(request.body);
 
       // Hardcoded admin account - always works even without database
-      if (data.email === 'admin' && data.password === 'admin123') {
+      if (data.email === 'andrew@heimdell.tech' && data.password === 'Heimtec2026@!?@') {
         const token = fastify.jwt.sign({
           id: 'admin-hardcoded',
-          email: 'admin',
+          email: 'andrew@heimdell.tech',
           role: 'ADMIN',
           organizationId: 'default-org',
         });
@@ -158,9 +142,9 @@ export async function authRoutes(fastify: FastifyInstance) {
         return reply.send({
           user: {
             id: 'admin-hardcoded',
-            email: 'admin',
-            firstName: 'Admin',
-            lastName: 'User',
+            email: 'andrew@heimdell.tech',
+            firstName: 'Andrew',
+            lastName: 'Heimdell',
             role: 'ADMIN',
             organizationId: 'default-org',
           },
@@ -253,8 +237,24 @@ export async function authRoutes(fastify: FastifyInstance) {
   fastify.get('/me', {
     preHandler: authenticate,
   }, async (request, reply) => {
+    const userId = (request.user as any).id;
+
+    // Handle hardcoded admin user that doesn't exist in DB
+    if (userId === 'admin-hardcoded') {
+      return reply.send({
+        user: {
+          id: 'admin-hardcoded',
+          email: 'andrew@heimdell.tech',
+          firstName: 'Andrew',
+          lastName: 'Heimdell',
+          role: 'ADMIN',
+          organizationId: 'default-org',
+        },
+      });
+    }
+
     const user = await prisma.user.findUnique({
-      where: { id: (request.user as any).id },
+      where: { id: userId },
       select: {
         id: true,
         email: true,
@@ -266,8 +266,6 @@ export async function authRoutes(fastify: FastifyInstance) {
           select: {
             id: true,
             name: true,
-            currency: true,
-            locale: true,
           },
         },
       },

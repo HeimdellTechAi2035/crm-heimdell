@@ -1,69 +1,52 @@
-import 'dotenv/config';
-
-// Dev mode: auto-disable features without keys
-const devTestMode = process.env.DEV_TEST_MODE === 'true';
-const hasOpenAiKey = !!process.env.OPENAI_API_KEY;
-const hasTwilioKeys = !!process.env.TWILIO_ACCOUNT_SID && !!process.env.TWILIO_AUTH_TOKEN;
-const hasDatabase = !!process.env.DATABASE_URL && process.env.DATABASE_ENABLED !== 'false';
+import dotenv from 'dotenv';
+dotenv.config();
 
 export const config = {
   port: parseInt(process.env.PORT || '3000', 10),
-  nodeEnv: process.env.NODE_ENV || 'development',
-  corsOrigin: process.env.CORS_ORIGIN || 'http://localhost:5173',
-  
-  // Dev mode flags
-  devTestMode,
-  features: {
-    redis: process.env.REDIS_ENABLED === 'true' || (!devTestMode && process.env.REDIS_ENABLED !== 'false'),
-    ai: devTestMode ? hasOpenAiKey : (process.env.AI_ENABLED !== 'false'),
-    twilio: devTestMode ? hasTwilioKeys : (process.env.TWILIO_ENABLED === 'true'),
-    drive: process.env.DRIVE_ENABLED === 'true',
-    dropbox: process.env.DROPBOX_ENABLED === 'true',
-    database: devTestMode ? hasDatabase : true,
-  },
-  
-  database: {
-    url: process.env.DATABASE_URL!,
-  },
-  
-  redis: {
-    url: process.env.REDIS_URL || 'redis://localhost:6379',
-  },
-  
+  host: process.env.HOST || '0.0.0.0',
+
   jwt: {
-    secret: process.env.JWT_SECRET!,
-    refreshSecret: process.env.JWT_REFRESH_SECRET!,
-    expiresIn: process.env.JWT_EXPIRES_IN || '15m',
-    refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
+    secret: process.env.JWT_SECRET || 'heimdell-dev-secret-change-in-production',
+    accessExpiresIn: process.env.JWT_ACCESS_EXPIRES || '15m',
+    refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES || '7d',
   },
-  
+
+  database: {
+    url: process.env.DATABASE_URL || 'postgresql://heimdell:heimdell_dev_password@localhost:5432/heimdell_crm',
+  },
+
+  redis: {
+    host: process.env.REDIS_HOST || 'localhost',
+    port: parseInt(process.env.REDIS_PORT || '6379', 10),
+    password: process.env.REDIS_PASSWORD || undefined,
+  },
+
   openai: {
     apiKey: process.env.OPENAI_API_KEY || '',
     model: process.env.OPENAI_MODEL || 'gpt-4-turbo-preview',
   },
-  
+
   smtp: {
-    host: process.env.SMTP_HOST || '',
-    port: parseInt(process.env.SMTP_PORT || '587', 10),
-    secure: process.env.SMTP_SECURE === 'true',
-    user: process.env.SMTP_USER || '',
-    password: process.env.SMTP_PASSWORD || '',
-    from: process.env.SMTP_FROM || 'Heimdell CRM <noreply@heimdell.com>',
+    host: process.env.SMTP_HOST || 'smtp.livemail.co.uk',
+    port: parseInt(process.env.SMTP_PORT || '465', 10),
+    secure: process.env.SMTP_SECURE !== 'false',
+    defaultFrom: process.env.SMTP_DEFAULT_FROM || 'andrew@remoteability.org',
   },
-  
-  twilio: {
-    accountSid: process.env.TWILIO_ACCOUNT_SID || '',
-    authToken: process.env.TWILIO_AUTH_TOKEN || '',
-    phoneNumber: process.env.TWILIO_PHONE_NUMBER || '',
+
+  encryptionKey: process.env.APP_ENCRYPTION_KEY || '',
+
+  features: {
+    ai: !!process.env.OPENAI_API_KEY,
+    database: process.env.ENABLE_DATABASE !== 'false',
+    redis: process.env.ENABLE_REDIS !== 'false',
+    email: !!process.env.SMTP_HOST,
   },
-  
-  rateLimit: {
-    max: parseInt(process.env.RATE_LIMIT_MAX || '100', 10),
-    timeWindow: process.env.RATE_LIMIT_TIMEWINDOW || '15m',
-  },
-  
-  ai: {
-    defaultMonthlyLimit: parseInt(process.env.DEFAULT_AI_MONTHLY_LIMIT || '10000', 10),
+
+  devTestMode: process.env.DEV_TEST_MODE === 'true' || process.env.NODE_ENV === 'development',
+
+  cors: {
+    origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
   },
 };
 
+export type Config = typeof config;

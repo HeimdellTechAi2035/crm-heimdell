@@ -48,7 +48,7 @@ export function DiagnosticsPage() {
 
   const loadRuns = async () => {
     try {
-      const response = await api.get('/api/diagnostics/runs');
+      const response = await api.get('/diagnostics/runs');
       setRuns(response.data.runs);
     } catch (error) {
       console.error('Failed to load runs:', error);
@@ -58,7 +58,7 @@ export function DiagnosticsPage() {
   const startRun = async (mode: 'quick' | 'full' | 'preflight', testMode: boolean) => {
     setLoading(true);
     try {
-      await api.post('/api/diagnostics/runs', { mode, testMode });
+      await api.post('/diagnostics/runs', { mode, testMode });
       // Poll for updates
       setTimeout(() => {
         loadRuns();
@@ -73,7 +73,7 @@ export function DiagnosticsPage() {
   const viewResults = async (run: DiagnosticsRun) => {
     setSelectedRun(run);
     try {
-      const response = await api.get(`/api/diagnostics/runs/${run.id}/results`);
+      const response = await api.get(`/diagnostics/runs/${run.id}/results`);
       setResults(response.data.results);
     } catch (error) {
       console.error('Failed to load results:', error);
@@ -83,7 +83,7 @@ export function DiagnosticsPage() {
   const retryFailed = async (runId: string) => {
     setLoading(true);
     try {
-      await api.post(`/api/diagnostics/runs/${runId}/retry-failed`);
+      await api.post(`/diagnostics/runs/${runId}/retry-failed`);
       setTimeout(() => {
         loadRuns();
         setLoading(false);

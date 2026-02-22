@@ -91,13 +91,20 @@ class ApiClient {
     });
   }
 
+  async patch(endpoint: string, data?: any) {
+    return this.request(endpoint, {
+      method: 'PATCH',
+      body: data ? JSON.stringify(data) : undefined,
+    });
+  }
+
   async delete(endpoint: string) {
     return this.request(endpoint, { method: 'DELETE' });
   }
 
   // Auth
   async login(email: string, password: string) {
-    const data = await this.request('/api/auth/login', {
+    const data = await this.request('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     });
@@ -106,7 +113,7 @@ class ApiClient {
   }
 
   async register(data: any) {
-    const response = await this.request('/api/auth/register', {
+    const response = await this.request('/auth/register', {
       method: 'POST',
       body: JSON.stringify(data),
     });
@@ -115,212 +122,159 @@ class ApiClient {
   }
 
   async logout() {
-    await this.request('/api/auth/logout', { method: 'POST' });
+    await this.request('/auth/logout', { method: 'POST' });
     this.setToken(null);
   }
 
   async getCurrentUser() {
-    return this.request('/api/auth/me');
+    return this.request('/auth/me');
   }
 
-  // Leads
-  async getLeads(params?: any) {
-    const query = new URLSearchParams(params).toString();
-    return this.request(`/api/leads?${query}`);
+  // ── Leads ────────────────────────────────────────────────
+  async getLeads(params?: Record<string, string>) {
+    const query = params ? '?' + new URLSearchParams(params).toString() : '';
+    return this.request(`/leads${query}`);
   }
 
   async getLead(id: string) {
-    return this.request(`/api/leads/${id}`);
+    return this.request(`/leads/${id}`);
   }
 
   async createLead(data: any) {
-    return this.request('/api/leads', {
+    return this.request('/leads', {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
   async updateLead(id: string, data: any) {
-    return this.request(`/api/leads/${id}`, {
+    return this.request(`/leads/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(data),
     });
   }
 
-  async deleteLead(id: string) {
-    return this.request(`/api/leads/${id}`, { method: 'DELETE' });
+  async logAction(id: string, action: string, notes?: string) {
+    return this.request(`/leads/${id}/actions`, {
+      method: 'POST',
+      body: JSON.stringify({ action, notes }),
+    });
   }
 
-  // Companies
-  async getCompanies(params?: any) {
-    const query = new URLSearchParams(params).toString();
-    return this.request(`/api/companies?${query}`);
+  async getLeadStats() {
+    return this.request('/leads/stats');
   }
 
-  async getCompany(id: string) {
-    return this.request(`/api/companies/${id}`);
+  // ── Pipeline ────────────────────────────────────────────
+  async advancePipeline(leadId: string, targetStatus: string) {
+    return this.request(`/pipeline/advance/${leadId}`, {
+      method: 'POST',
+      body: JSON.stringify({ targetStatus }),
+    });
   }
 
-  async createCompany(data: any) {
-    return this.request('/api/companies', {
+  async getDueLeads() {
+    return this.request('/pipeline/due');
+  }
+
+  async getPipelineStatus(leadId: string) {
+    return this.request(`/pipeline/status/${leadId}`);
+  }
+
+  async runSchedulerTick() {
+    return this.request('/pipeline/scheduler-tick', { method: 'POST' });
+  }
+
+  // ── Google Sheets Integration ───────────────────────────
+  async getSheetsConfigs() {
+    return this.request('/integrations/configs');
+  }
+
+  async createSheetsConfig(data: any) {
+    return this.request('/integrations/configs', {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
-  async updateCompany(id: string, data: any) {
-    return this.request(`/api/companies/${id}`, {
+  async triggerSyncIn(configId: string, dryRun = false) {
+    return this.request('/integrations/sync-in', {
+      method: 'POST',
+      body: JSON.stringify({ configId, dryRun }),
+    });
+  }
+
+  async triggerSyncOut(configId: string) {
+    return this.request('/integrations/sync-out', {
+      method: 'POST',
+      body: JSON.stringify({ configId }),
+    });
+  }
+
+  async getSyncLogs(configId: string) {
+    return this.request(`/integrations/sync-logs/${configId}`);
+  }
+
+  // ── API Keys (Admin) ───────────────────────────────────
+  async getApiKeys() {
+    return this.request('/api-keys');
+  }
+
+  async createApiKey(name: string, permissions: string[]) {
+    return this.request('/api-keys', {
+      method: 'POST',
+      body: JSON.stringify({ name, permissions }),
+    });
+  }
+
+  async revokeApiKey(id: string) {
+    return this.request(`/api-keys/${id}`, { method: 'DELETE' });
+  }
+
+  // ── Email Senders (Phase 3) ────────────────────────────
+  async getEmailSenders() {
+    return this.request('/integrations/email/senders');
+  }
+
+  async createEmailSender(data: any) {
+    return this.request('/integrations/email/senders', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateEmailSender(id: string, data: any) {
+    return this.request(`/integrations/email/senders/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(data),
     });
   }
 
-  // Deals
-  async getDeals(params?: any) {
-    const query = new URLSearchParams(params).toString();
-    return this.request(`/api/deals?${query}`);
-  }
-
-  async getDeal(id: string) {
-    return this.request(`/api/deals/${id}`);
-  }
-
-  async createDeal(data: any) {
-    return this.request('/api/deals', {
+  async testSendEmail(data: { senderEmail: string; to: string; subject: string; text: string }) {
+    return this.request('/integrations/email/test-send', {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
-  async updateDeal(id: string, data: any) {
-    return this.request(`/api/deals/${id}`, {
-      method: 'PATCH',
-      body: JSON.stringify(data),
-    });
+  async getEmailLogs(params?: Record<string, string>) {
+    const query = params ? '?' + new URLSearchParams(params).toString() : '';
+    return this.request(`/integrations/email/logs${query}`);
   }
 
-  async moveDeal(id: string, stageId: string) {
-    return this.request(`/api/deals/${id}/move`, {
-      method: 'POST',
-      body: JSON.stringify({ stageId }),
-    });
+  async getEmailAllowlist() {
+    return this.request('/integrations/email/allowlist');
   }
 
-  async closeDeal(id: string, status: 'won' | 'lost', lostReason?: string) {
-    return this.request(`/api/deals/${id}/close`, {
-      method: 'POST',
-      body: JSON.stringify({ status, lostReason }),
-    });
-  }
-
-  // Activities
-  async getActivities(params?: any) {
-    const query = new URLSearchParams(params).toString();
-    return this.request(`/api/activities?${query}`);
-  }
-
-  async createActivity(data: any) {
-    return this.request('/api/activities', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-  }
-
-  // Tasks
-  async getTasks(params?: any) {
-    const query = new URLSearchParams(params).toString();
-    return this.request(`/api/tasks?${query}`);
-  }
-
-  async createTask(data: any) {
-    return this.request('/api/tasks', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-  }
-
-  async updateTask(id: string, data: any) {
-    return this.request(`/api/tasks/${id}`, {
-      method: 'PATCH',
-      body: JSON.stringify(data),
-    });
-  }
-
-  // Pipelines
-  async getPipelines() {
-    return this.request('/api/pipelines');
-  }
-
-  async getPipelineBoard(id: string) {
-    return this.request(`/api/pipelines/${id}/board`);
-  }
-
-  // Sequences
-  async getSequences() {
-    return this.request('/api/sequences');
-  }
-
-  async createSequence(data: any) {
-    return this.request('/api/sequences', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-  }
-
-  async enrollLead(sequenceId: string, leadId: string) {
-    return this.request(`/api/sequences/${sequenceId}/enroll`, {
-      method: 'POST',
-      body: JSON.stringify({ leadId }),
-    });
-  }
-
-  // AI
-  async enrichLead(data: any) {
-    return this.request('/api/ai/enrich', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-  }
-
-  async getNextAction(data: any) {
-    return this.request('/api/ai/next-action', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-  }
-
-  async generateSequence(data: any) {
-    return this.request('/api/ai/generate-sequence', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-  }
-
-  async summarizeCall(data: any) {
-    return this.request('/api/ai/summarize-call', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-  }
-
-  async generateProfile(data: { leadId?: string; companyId?: string }) {
-    return this.request('/api/ai/profile-from-import', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-  }
-
-  // Imports
+  // ── CSV Upload (legacy) ────────────────────────────────
   async uploadCSV(file: File) {
     const formData = new FormData();
     formData.append('file', file);
 
-    const token = this.token || localStorage.getItem('access_token');
-    const response = await fetch(`${this.baseUrl}/api/imports/csv`, {
+    const token = this.token || localStorage.getItem('token');
+    const response = await fetch(`${this.baseUrl}/imports/csv`, {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
+      headers: { Authorization: `Bearer ${token}` },
       body: formData,
     });
 
@@ -328,33 +282,7 @@ class ApiClient {
       const error = await response.json();
       throw new Error(error.error || 'Upload failed');
     }
-
     return response.json();
-  }
-
-  async submitImportMapping(importJobId: string, mapping: any) {
-    return this.request(`/api/imports/${importJobId}/mapping`, {
-      method: 'POST',
-      body: JSON.stringify(mapping),
-    });
-  }
-
-  async getImportStatus(importJobId: string) {
-    return this.request(`/api/imports/${importJobId}/status`);
-  }
-
-  async getImportErrors(importJobId: string) {
-    return this.request(`/api/imports/${importJobId}/errors`);
-  }
-
-  async getImports() {
-    return this.request('/api/imports');
-  }
-
-  // Dashboard
-  async getDashboard(params?: any) {
-    const query = new URLSearchParams(params).toString();
-    return this.request(`/api/dashboard?${query}`);
   }
 }
 
