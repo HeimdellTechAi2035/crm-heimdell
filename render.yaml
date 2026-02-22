@@ -1,0 +1,39 @@
+databases:
+  - name: heimdell-db
+    plan: free
+    databaseName: heimdell_crm
+    user: heimdell
+
+services:
+  - type: web
+    plan: free
+    name: heimdell-crm
+    runtime: node
+    buildCommand: |
+      corepack enable &&
+      corepack prepare pnpm@9 --activate &&
+      pnpm install &&
+      cd apps/api && npx prisma generate && pnpm build && cd ../.. &&
+      cd apps/web && pnpm build
+    startCommand: cd apps/api && npx prisma migrate deploy && node dist/server.js
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "3000"
+      - key: HOST
+        value: "0.0.0.0"
+      - key: ENABLE_REDIS
+        value: "false"
+      - key: JWT_ACCESS_EXPIRES
+        value: "24h"
+      - key: JWT_SECRET
+        generateValue: true
+      - key: APP_ENCRYPTION_KEY
+        generateValue: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: heimdell-db
+          property: connectionString
