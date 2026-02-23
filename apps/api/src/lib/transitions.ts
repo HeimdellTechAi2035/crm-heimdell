@@ -49,16 +49,16 @@ function daysSince(date: Date): number {
 
 // ─── Allowed Transition Map ─────────────────────────────────
 
-/** All valid from→to transitions. REPLIED is a special interrupt. */
+/** All valid from→to transitions. REPLIED and NOT_INTERESTED are special interrupts. */
 const TRANSITION_MAP: Record<LeadStatus, LeadStatus[]> = {
-  NEW:            ['CONTACTED_1', 'REPLIED'],
-  CONTACTED_1:    ['WAITING_D2', 'REPLIED'],
-  WAITING_D2:     ['CALL_DUE', 'REPLIED'],
-  CALL_DUE:       ['CALLED', 'REPLIED'],
-  CALLED:         ['WAITING_D1', 'REPLIED'],
-  WAITING_D1:     ['CONTACTED_2', 'REPLIED'],
-  CONTACTED_2:    ['WA_VOICE_DUE', 'COMPLETED', 'REPLIED'],
-  WA_VOICE_DUE:   ['COMPLETED', 'REPLIED'],
+  NEW:            ['CONTACTED_1', 'REPLIED', 'NOT_INTERESTED'],
+  CONTACTED_1:    ['WAITING_D2', 'REPLIED', 'NOT_INTERESTED'],
+  WAITING_D2:     ['CALL_DUE', 'REPLIED', 'NOT_INTERESTED'],
+  CALL_DUE:       ['CALLED', 'REPLIED', 'NOT_INTERESTED'],
+  CALLED:         ['WAITING_D1', 'REPLIED', 'NOT_INTERESTED'],
+  WAITING_D1:     ['CONTACTED_2', 'REPLIED', 'NOT_INTERESTED'],
+  CONTACTED_2:    ['WA_VOICE_DUE', 'COMPLETED', 'REPLIED', 'NOT_INTERESTED'],
+  WA_VOICE_DUE:   ['COMPLETED', 'REPLIED', 'NOT_INTERESTED'],
   REPLIED:        ['QUALIFIED', 'NOT_INTERESTED'],
   QUALIFIED:      ['COMPLETED'],
   NOT_INTERESTED: ['COMPLETED'],
@@ -201,6 +201,17 @@ const RULES: Record<string, TransitionRule> = {
     precondition: () => ({ ok: true }),
     sideEffects: () => ({ nextAction: 'close_out', nextActionDueUtc: null, qualified: false }),
   },
+
+  // ── Interrupt: NOT_INTERESTED (from any active status) ──
+
+  'NEW→NOT_INTERESTED':          { precondition: () => ({ ok: true }), sideEffects: () => ({ nextAction: 'close_out', nextActionDueUtc: null, qualified: false }) },
+  'CONTACTED_1→NOT_INTERESTED':  { precondition: () => ({ ok: true }), sideEffects: () => ({ nextAction: 'close_out', nextActionDueUtc: null, qualified: false }) },
+  'WAITING_D2→NOT_INTERESTED':   { precondition: () => ({ ok: true }), sideEffects: () => ({ nextAction: 'close_out', nextActionDueUtc: null, qualified: false }) },
+  'CALL_DUE→NOT_INTERESTED':     { precondition: () => ({ ok: true }), sideEffects: () => ({ nextAction: 'close_out', nextActionDueUtc: null, qualified: false }) },
+  'CALLED→NOT_INTERESTED':       { precondition: () => ({ ok: true }), sideEffects: () => ({ nextAction: 'close_out', nextActionDueUtc: null, qualified: false }) },
+  'WAITING_D1→NOT_INTERESTED':   { precondition: () => ({ ok: true }), sideEffects: () => ({ nextAction: 'close_out', nextActionDueUtc: null, qualified: false }) },
+  'CONTACTED_2→NOT_INTERESTED':  { precondition: () => ({ ok: true }), sideEffects: () => ({ nextAction: 'close_out', nextActionDueUtc: null, qualified: false }) },
+  'WA_VOICE_DUE→NOT_INTERESTED': { precondition: () => ({ ok: true }), sideEffects: () => ({ nextAction: 'close_out', nextActionDueUtc: null, qualified: false }) },
 
   'QUALIFIED→COMPLETED': {
     precondition: () => ({ ok: true }),
