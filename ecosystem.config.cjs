@@ -16,7 +16,7 @@ module.exports = {
       script: 'node_modules/.bin/tsx',
       args: 'apps/api/src/server.ts',
       cwd: __dirname,
-      instances: 1, // Pi 3 has 1GB RAM — keep it to 1 instance
+      instances: 1, // single instance for t3.micro/small; increase for larger instances
       exec_mode: 'fork',
 
       // Environment
@@ -35,8 +35,8 @@ module.exports = {
       restart_delay: 5000,
       autorestart: true,
 
-      // Memory limit (Pi 3 has 1GB total)
-      max_memory_restart: '512M',
+      // Memory limit — adjust based on instance size (512M for t3.micro, 1G for t3.small)
+      max_memory_restart: '768M',
 
       // Logging
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
