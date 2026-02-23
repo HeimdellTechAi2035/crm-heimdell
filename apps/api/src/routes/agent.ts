@@ -50,6 +50,24 @@ const agentAdvanceSchema = z.object({
   targetStatus: z.nativeEnum(LeadStatus),
 });
 
+const agentCreateLeadSchema = z.object({
+  company: z.string().min(1),
+  keyDecisionMaker: z.string().min(1),
+  role: z.string().optional(),
+  website: z.string().optional(),
+  emails: z.array(z.string().email()).default([]),
+  number: z.string().optional(),
+  mobileValid: z.boolean().default(false),
+  facebookClean: z.string().optional(),
+  instaClean: z.string().optional(),
+  linkedinClean: z.string().optional(),
+  notes: z.string().optional(),
+});
+
+const agentBulkCreateSchema = z.object({
+  leads: z.array(agentCreateLeadSchema).min(1).max(100),
+});
+
 const agentEmailSchema = z.object({
   leadId: z.string().optional(),
   senderEmail: z.string().email(),
@@ -91,6 +109,101 @@ export async function agentRoutes(app: FastifyInstance) {
     });
 
     return { leads, count: leads.length };
+  });
+
+  /**
+   * POST /api/agent/leads — Create a new lead.
+   */
+  app.post('/leads', {
+    preHandler: requirePermission('update'),
+  }, async (request, reply) => {
+    const agent = request.agent!;
+    const data = agentCreateLeadSchema.parse(request.body);
+
+    const lead = await prisma.lead.create({
+      data: {
+        organizationId: agent.organizationId,
+        company: data.company,
+        keyDecisionMaker: data.keyDecisionMaker,
+        role: data.role,
+        website: data.website,
+        emails: data.emails,
+        number: data.number,
+        mobileValid: data.mobileValid,
+        facebookClean: data.facebookClean,
+        instaClean: data.instaClean,
+        linkedinClean: data.linkedinClean,
+        notes: data.notes,
+        status: 'NEW',
+        nextAction: 'Send first outreach (DM or email)',
+        nextActionDueUtc: new Date(),
+      },
+    });
+
+    await writeAuditLog({
+      leadId: lead.id,
+      organizationId: agent.organizationId,
+      actor: agent.actor,
+      action: 'lead_created',
+      before: null,
+      after: { company: lead.company, keyDecisionMaker: lead.keyDecisionMaker, status: 'NEW' },
+      source: 'agent',
+    });
+
+    return reply.code(201).send({ lead });
+  });
+
+  /**
+   * POST /api/agent/leads/bulk — Create multiple leads at once (max 100).
+   */
+  app.post('/leads/bulk', {
+    preHandler: requirePermission('update'),
+  }, async (request, reply) => {
+    const agent = request.agent!;
+    const { leads: leadsData } = agentBulkCreateSchema.parse(request.body);
+
+    const created: any[] = [];
+    const errors: any[] = [];
+
+    for (const data of leadsData) {
+      try {
+        const lead = await prisma.lead.create({
+          data: {
+            organizationId: agent.organizationId,
+            company: data.company,
+            keyDecisionMaker: data.keyDecisionMaker,
+            role: data.role,
+            website: data.website,
+            emails: data.emails,
+            number: data.number,
+            mobileValid: data.mobileValid,
+            facebookClean: data.facebookClean,
+            instaClean: data.instaClean,
+            linkedinClean: data.linkedinClean,
+            notes: data.notes,
+            status: 'NEW',
+            nextAction: 'Send first outreach (DM or email)',
+            nextActionDueUtc: new Date(),
+          },
+        });
+
+        await writeAuditLog({
+          leadId: lead.id,
+          organizationId: agent.organizationId,
+          actor: agent.actor,
+          action: 'lead_created',
+          before: null,
+          after: { company: lead.company, keyDecisionMaker: lead.keyDecisionMaker, status: 'NEW' },
+          source: 'agent',
+        });
+
+        created.push(lead);
+      } catch (err: any) {
+        errors.push({ company: data.company, error: err.message });
+      }
+    }
+
+    return reply.code(201).send({ created: created.length, errors: errors.length, leads: created, failures: errors });
   });
 
   /**
