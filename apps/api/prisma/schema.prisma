@@ -211,3 +211,48 @@ model ApiKey {
 
   @@map("api_keys")
 }
+
+// ─── Email SMTP (Phase 3) ───────────────────────────────────
+
+enum EmailSendStatus {
+  SENT
+  FAILED
+}
+
+model SenderAccount {
+  id                String   @id @default(cuid())
+  email             String   @unique
+  displayName       String?  @map("display_name")
+  smtpHost          String   @map("smtp_host")
+  smtpPort          Int      @map("smtp_port")
+  smtpSecure        Boolean  @default(true) @map("smtp_secure")
+  smtpUser          String   @map("smtp_user")
+  smtpPassEncrypted String   @map("smtp_pass_encrypted")
+  isActive          Boolean  @default(true) @map("is_active")
+  dailyLimit        Int      @default(100) @map("daily_limit")
+  sentToday         Int      @default(0) @map("sent_today")
+  lastResetAt       DateTime @default(now()) @map("last_reset_at")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  emailLogs EmailSendLog[]
+
+  @@map("sender_accounts")
+}
+
+model EmailSendLog {
+  id              String          @id @default(cuid())
+  senderAccountId String          @map("sender_account_id")
+  toEmail         String          @map("to_email")
+  subject         String
+  status          EmailSendStatus
+  messageId       String?         @map("message_id")
+  errorMessage    String?         @map("error_message")
+  sentAt          DateTime        @default(now()) @map("sent_at")
+
+  senderAccount SenderAccount @relation(fields: [senderAccountId], references: [id])
+
+  @@index([senderAccountId])
+  @@index([toEmail])
+  @@map("email_send_logs")
+}

@@ -1,6 +1,9 @@
 # ─── Stage 1: Install & Build ───────────────────────────
 FROM node:20-alpine AS builder
 
+# Build tools needed for bcrypt native module
+RUN apk add --no-cache python3 make g++
+
 RUN corepack enable && corepack prepare pnpm@9 --activate
 
 WORKDIR /app
@@ -29,6 +32,9 @@ RUN cd apps/web && pnpm build
 # ─── Stage 2: Production ────────────────────────────────
 FROM node:20-alpine AS production
 
+# Runtime deps for bcrypt
+RUN apk add --no-cache libstdc++
+
 RUN corepack enable && corepack prepare pnpm@9 --activate
 
 WORKDIR /app
@@ -44,8 +50,9 @@ RUN pnpm install --frozen-lockfile --prod || pnpm install --prod
 # Copy Prisma schema + migrations (needed for migrate deploy)
 COPY apps/api/prisma/ apps/api/prisma/
 
-# Re-generate Prisma client in production image
-RUN cd apps/api && npx prisma generate
+# Copy generated Prisma client from builder (avoids version mismatch)
+COPY --from=builder /app/node_modules/.pnpm/@prisma+client*/node_modules/.prisma/ /app/node_modules/.prisma/
+COPY --from=builder /app/apps/api/node_modules/.prisma/ apps/api/node_modules/.prisma/
 
 # Copy API build output
 COPY --from=builder /app/apps/api/dist/ apps/api/dist/
